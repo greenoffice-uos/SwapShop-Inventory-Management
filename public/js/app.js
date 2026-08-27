@@ -1,5 +1,5 @@
 /**
- * EcoSwap - Guided Conversational Form (CF) Inventory System
+ * Global Belongings - Swap Shop Guided Conversational Form (CF) Inventory System
  * 
  * Features:
  * - Generic Item Descriptions (Mug, Plate, Fork, Knife, Spoon, Teaspoon, Pillow, Lamp, etc.)
@@ -263,7 +263,7 @@ function initAdminPasswordModal() {
 // SESSION & SAVE-AFTER-EACH-STEP CORE
 // ==========================================================================
 function initSession() {
-  const saved = localStorage.getItem('ecoswap_active_session');
+  const saved = localStorage.getItem('swapshop_active_session');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
@@ -293,7 +293,7 @@ function startFreshSession() {
   };
   State.stepSaveHistory = [];
 
-  localStorage.removeItem('ecoswap_active_session');
+  localStorage.removeItem('swapshop_active_session');
   updateSessionIdTag();
   updateStepCountBadge();
   resetProgressTracker(1);
@@ -365,7 +365,7 @@ async function saveStep(stepKey, stepName, stepPayload) {
     stepSaveHistory: State.stepSaveHistory,
     savedAt: new Date().toISOString()
   };
-  localStorage.setItem('ecoswap_active_session', JSON.stringify(sessionBlob));
+  localStorage.setItem('swapshop_active_session', JSON.stringify(sessionBlob));
 
   // 2. Post to Backend API
   try {
@@ -440,7 +440,7 @@ function updateStepCountBadge() {
 function renderStep1_StudentVsNonStudent() {
   resetProgressTracker(1);
   addBotMessage({
-    text: "Welcome to EcoSwap! Let's get your swap recorded in a few guided steps. First: are you a university student or visiting as a non-student / community member?",
+    text: "Welcome to Global Belongings! Let's get your swap recorded in a few guided steps. First: are you a university student or visiting as a non-student / community member?",
     options: [
       {
         id: 'opt-student',
@@ -740,7 +740,7 @@ async function finalizeTransaction() {
 
     if (result.success) {
       renderReceiptCard(result.transaction);
-      localStorage.removeItem('ecoswap_active_session');
+      localStorage.removeItem('swapshop_active_session');
       loadInventory(false);
       loadAnalytics(false);
       loadActivityLog(false);
@@ -761,7 +761,7 @@ async function finalizeTransaction() {
       value_saved_eur: (State.sessionData.items.length * 10.0).toFixed(2),
       co2_saved_kg: (State.sessionData.items.length * 1.5).toFixed(1)
     });
-    localStorage.removeItem('ecoswap_active_session');
+    localStorage.removeItem('swapshop_active_session');
   }
 }
 
@@ -1352,7 +1352,7 @@ function addBotMessage({ text, options = null }) {
       <div class="bubble-text">${text}</div>
       ${optionsHtml}
       <div class="bubble-meta">
-        <span><i class="ph ph-sparkle"></i> EcoSwap Assistant</span>
+        <span><i class="ph ph-sparkle"></i> Global Belongings Assistant</span>
         <span>•</span>
         <span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
       </div>

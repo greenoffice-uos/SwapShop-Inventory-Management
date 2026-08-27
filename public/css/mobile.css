@@ -1,5 +1,5 @@
 /* ==========================================================================
-   EcoSwap Mobile-First Kiosk Stylesheet
+   Global Belongings — Mobile Kiosk Stylesheet
    Optimized for phones & touch screens (iOS / Android / Kiosk)
    ========================================================================== */
 
@@ -80,14 +80,21 @@ body.mobile-kiosk-body {
 .app-logo {
   width: 38px;
   height: 38px;
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
+  background: #ffffff;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.4rem;
-  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.app-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 2px;
+  display: block;
 }
 
 .app-title-box {

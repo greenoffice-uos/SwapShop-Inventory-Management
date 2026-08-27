@@ -1,5 +1,5 @@
 /**
- * Cloudflare Universal Worker for EcoSwap
+ * Cloudflare Universal Worker for Global Belongings
  * Supports Cloudflare Workers with Static Assets & Cloudflare Pages.
  * KV Namespace binding: swapshop_kv
  */
@@ -888,7 +888,7 @@ const DEFAULT_INVENTORY = [
 ];
 const DEFAULT_SETTINGS = {
   adminPassword: "swapadmin",
-  shopName: "EcoSwap Hub",
+  shopName: "Global Belongings",
   co2KgPerKgGoods: 2.8
 };
 
@@ -1363,6 +1363,18 @@ async function handleApi(request, env, url) {
   if (path === "transactions" && method === "GET") {
     const transactions = await getKV("transactions", []);
     return jsonResponse({ success: true, count: transactions.length, transactions });
+  }
+
+  if (path.startsWith("transactions/") && method === "DELETE") {
+    const txId = path.replace("transactions/", "");
+    let transactions = await getKV("transactions", []);
+    const idx = transactions.findIndex(t => t.id === txId);
+    if (idx === -1) {
+      return jsonResponse({ success: false, error: "Transaction not found" }, 404);
+    }
+    transactions.splice(idx, 1);
+    await putKV("transactions", transactions);
+    return jsonResponse({ success: true, message: "Transaction deleted" });
   }
 
   return jsonResponse({ error: "Endpoint not found: " + path }, 404);

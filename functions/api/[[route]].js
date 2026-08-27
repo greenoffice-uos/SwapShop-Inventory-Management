@@ -1,5 +1,5 @@
 /**
- * Cloudflare Pages Functions - Full API Router for EcoSwap
+ * Cloudflare Pages Functions - Full API Router for Global Belongings
  * Zero-config serverless backend running globally on Cloudflare Edge.
  * Persistent storage via Cloudflare KV (Namespace: swapshop_kv).
  */
@@ -890,7 +890,7 @@ const DEFAULT_INVENTORY = [
 
 const DEFAULT_SETTINGS = {
   adminPassword: "swapadmin",
-  shopName: "EcoSwap Hub",
+  shopName: "Global Belongings",
   co2KgPerKgGoods: 2.8
 };
 
@@ -1331,6 +1331,18 @@ export async function onRequest(context) {
   if (path === "transactions" && method === "GET") {
     const transactions = await getKV("transactions", []);
     return new Response(JSON.stringify({ success: true, count: transactions.length, transactions }), { headers: corsHeaders });
+  }
+
+  if (path.startsWith("transactions/") && method === "DELETE") {
+    const txId = path.replace("transactions/", "");
+    let transactions = await getKV("transactions", []);
+    const idx = transactions.findIndex(t => t.id === txId);
+    if (idx === -1) {
+      return new Response(JSON.stringify({ success: false, error: "Transaction not found" }), { status: 404, headers: corsHeaders });
+    }
+    transactions.splice(idx, 1);
+    await putKV("transactions", transactions);
+    return new Response(JSON.stringify({ success: true, message: "Transaction deleted" }), { headers: corsHeaders });
   }
 
   return new Response(JSON.stringify({ error: "Endpoint not found" }), { status: 404, headers: corsHeaders });

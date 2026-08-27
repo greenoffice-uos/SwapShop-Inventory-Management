@@ -48,7 +48,7 @@ function writeJSON(file, data) {
 if (!fs.existsSync(SETTINGS_FILE)) {
   writeJSON(SETTINGS_FILE, {
     adminPassword: 'swapadmin',
-    shopName: 'EcoSwap Hub',
+    shopName: 'Global Belongings',
     co2KgPerKgGoods: 2.8
   });
 }
@@ -540,5 +540,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`EcoSwap Zero-Dependency Server listening on http://0.0.0.0:${PORT}`);
+  console.log(`Global Belongings Zero-Dependency Server listening on http://0.0.0.0:${PORT}`);
 });

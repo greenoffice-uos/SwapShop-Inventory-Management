@@ -1,4 +1,4 @@
-# EcoSwap - Guided Conversational Form (CF) Inventory System
+# Global Belongings — Swap Shop (Guided Conversational Form Inventory System)
 
 A complete, intelligent **Conversational Form (CF)** inventory management system built specifically for university and community **Swap Shops** (circular reuse hubs). 
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EcoSwap | Staff Admin Portal</title>
+  <title>Global Belongings | Swap Shop Admin</title>
   
   <!-- Phosphor Icons Local Font -->
   <link rel="stylesheet" href="/vendor/phosphor/style.css">
@@ -11,15 +11,14 @@
   <!-- Admin Stylesheet -->
   <link rel="stylesheet" href="/css/admin.css">
   
-  <!-- Favicon -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+  <link rel="icon" type="image/png" href="/images/logo-square.png">
 </head>
 <body>
 
   <!-- ADMIN AUTH GATE (Shown if not authenticated) -->
   <div class="admin-auth-screen" id="adminAuthScreen">
     <div class="auth-box">
-      <div class="auth-icon"><i class="ph ph-shield-check"></i></div>
+      <div class="auth-logo"><img src="/images/logo-square.png" alt="Global Belongings"></div>
       <h2>Staff Admin Access</h2>
       <p>Enter the swap shop staff password to manage inventory, categories, and synonym mapping.</p>
       
@@ -48,13 +47,13 @@
     <!-- Top Header -->
     <header class="admin-top-header">
       <div class="header-brand">
-        <div class="logo-box"><i class="ph ph-shield-check"></i></div>
+        <div class="logo-box"><img src="/images/logo-square.png" alt="Global Belongings" class="logo-img"></div>
         <div>
           <div class="title-row">
-            <h1>EcoSwap Admin</h1>
+            <h1>Global Belongings</h1>
             <span class="staff-badge"><i class="ph ph-check-circle"></i> Staff Logged In</span>
           </div>
-          <div class="sub-row">Swap Shop Inventory & Circulation Hub</div>
+          <div class="sub-row">Swap Shop · From one journey to another.</div>
         </div>
       </div>
 
@@ -138,6 +137,12 @@
           </div>
         </div>
 
+        <div class="unlinked-panel">
+          <h4><i class="ph ph-link"></i> Unlinked kiosk entries</h4>
+          <p>Words entered at the kiosk that don't match any stock pool item yet. Link a word to an existing item, or turn it into a new one (the word becomes its name and a synonym).</p>
+          <div id="unlinkedItemsList" class="unlinked-list"></div>
+        </div>
+
         <div class="mapping-tool-card">
           <h4><i class="ph ph-link"></i> Map Word / Submission to Existing Item Pool</h4>
           <form id="formMapSynonymPool">
@@ -182,19 +187,14 @@
                 <input type="text" id="catNameInput" required placeholder="e.g. Sports & Outdoors, Games & Hobbies" />
               </div>
               <div class="form-group">
-                <label for="catIconSelect">Phosphor Icon</label>
-                <select id="catIconSelect">
-                  <option value="ph-tag">ph-tag (Default Tag)</option>
-                  <option value="ph-cooking-pot">ph-cooking-pot (Kitchen)</option>
-                  <option value="ph-book-open">ph-book-open (Study)</option>
-                  <option value="ph-t-shirt">ph-t-shirt (Clothing)</option>
-                  <option value="ph-bed">ph-bed (Bedding)</option>
-                  <option value="ph-plug">ph-plug (Electronics)</option>
-                  <option value="ph-armchair">ph-armchair (Furniture)</option>
-                  <option value="ph-bicycle">ph-bicycle (Sports)</option>
-                  <option value="ph-game-controller">ph-game-controller (Hobbies)</option>
-                  <option value="ph-paint-brush">ph-paint-brush (Crafts & Art)</option>
-                </select>
+                <label for="catIconInput">Phosphor Icon</label>
+                <div class="icon-pick-row">
+                  <i class="ph ph-tag cat-icon-preview" id="catIconPreview"></i>
+                  <input type="text" id="catIconInput" list="phIconOptions" value="tag" placeholder="Type a name, e.g. lamp" autocomplete="off" />
+                  <a class="btn-secondary-sm icon-browse" href="https://phosphoricons.com/" target="_blank" rel="noopener"><i class="ph ph-magnifying-glass"></i> Browse all icons</a>
+                </div>
+                <datalist id="phIconOptions"></datalist>
+                <small class="form-hint">Suggestions are the 1,530 icons bundled with this app — only those render in the UI.</small>
               </div>
               <div class="form-group">
                 <label for="catDescInput">Description</label>
@@ -409,6 +409,7 @@
   </div>
 
   <!-- Admin Application Logic -->
+  <script src="/js/ph-icons.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

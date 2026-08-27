@@ -1,6 +1,6 @@
-# Cloudflare Deployment Guide for EcoSwap
+# Cloudflare Deployment Guide for Global Belongings (Swap Shop)
 
-This guide provides step-by-step instructions for deploying the EcoSwap system to Cloudflare.
+This guide provides step-by-step instructions for deploying the Global Belongings swap shop to Cloudflare.
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * EcoSwap Mobile Kiosk Application Logic
+ * Global Belongings Mobile Kiosk Application Logic
  * Pure, distraction-free conversational swap assistant
  */
 
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // SESSION & AUTO-SAVE MANAGEMENT
 // ==========================================================================
 function initKioskSession() {
-  const saved = localStorage.getItem('ecoswap_kiosk_session');
+  const saved = localStorage.getItem('swapshop_kiosk_session');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
@@ -84,7 +84,7 @@ function startFreshSession() {
     notes: ''
   };
 
-  localStorage.removeItem('ecoswap_kiosk_session');
+  localStorage.removeItem('swapshop_kiosk_session');
   clearChat();
   setSaveIndicator('idle', 'Ready');
   renderStep1_StudentVsNonStudent();
@@ -133,7 +133,7 @@ async function saveStep(stepKey, stepName, stepPayload) {
     sessionData: State.sessionData,
     savedAt: new Date().toISOString()
   };
-  localStorage.setItem('ecoswap_kiosk_session', JSON.stringify(sessionBlob));
+  localStorage.setItem('swapshop_kiosk_session', JSON.stringify(sessionBlob));
 
   try {
     const res = await fetch('/api/session/step', {
@@ -182,7 +182,7 @@ function setSaveIndicator(status, text) {
 /** Step 1: Student vs Non-Student */
 function renderStep1_StudentVsNonStudent() {
   addBotMessage({
-    text: "Welcome to EcoSwap! Let's get your swap recorded in a few quick steps. Are you a student or visiting as a non-student / community member?",
+    text: "Welcome to Global Belongings! Let's get your swap recorded in a few quick steps. Are you a student or visiting as a non-student / community member?",
     options: [
       {
         id: 'opt-student',
@@ -886,7 +886,7 @@ async function finalizeKioskSwap() {
 
     if (result.success) {
       renderReceiptBox(result.transaction);
-      localStorage.removeItem('ecoswap_kiosk_session');
+      localStorage.removeItem('swapshop_kiosk_session');
     }
   } catch (err) {
     hideTyping();
@@ -899,7 +899,7 @@ async function finalizeKioskSwap() {
       value_saved_eur: (State.sessionData.items.length * 10.0).toFixed(2),
       co2_saved_kg: (State.sessionData.items.length * 1.5).toFixed(1)
     });
-    localStorage.removeItem('ecoswap_kiosk_session');
+    localStorage.removeItem('swapshop_kiosk_session');
   }
 }
 
@@ -1063,7 +1063,7 @@ function addBotMessage({ text, options = null }) {
       <div class="bubble-text">${text}</div>
       ${optionsHtml}
       <div class="bubble-meta">
-        <span>EcoSwap Assistant</span>
+        <span>Global Belongings Assistant</span>
         <span>•</span>
         <span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
       </div>

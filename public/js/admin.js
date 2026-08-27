@@ -1,10 +1,11 @@
 /**
- * EcoSwap Staff Admin Portal Logic
+ * Global Belongings Staff Admin Portal Logic
  */
 
 const AdminState = {
   inventory: [],
   categories: [],
+  transactions: [],
   selectedCategory: 'All',
   searchQuery: ''
 };
@@ -17,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCategoryManagement();
   initModals();
 
-  if (sessionStorage.getItem('ecoswap_admin_authed') === 'true') {
+  if (sessionStorage.getItem('swapshop_admin_authed') === 'true') {
     loadAllAdminData();
   }
 });
@@ -33,7 +34,7 @@ function initAuth() {
   const errMsg = document.getElementById('authErrorMsg');
   const btnLock = document.getElementById('btnLockAdminSession');
 
-  if (sessionStorage.getItem('ecoswap_admin_authed') === 'true') {
+  if (sessionStorage.getItem('swapshop_admin_authed') === 'true') {
     authScreen.style.display = 'none';
     adminApp.style.display = 'flex';
   } else {
@@ -54,7 +55,7 @@ function initAuth() {
       const data = await res.json();
 
       if (data.success) {
-        sessionStorage.setItem('ecoswap_admin_authed', 'true');
+        sessionStorage.setItem('swapshop_admin_authed', 'true');
         authScreen.style.display = 'none';
         adminApp.style.display = 'flex';
         loadAllAdminData();
@@ -64,7 +65,7 @@ function initAuth() {
       }
     } catch (err) {
       if (pass === 'swapadmin' || pass === 'ecoswap2026') {
-        sessionStorage.setItem('ecoswap_admin_authed', 'true');
+        sessionStorage.setItem('swapshop_admin_authed', 'true');
         authScreen.style.display = 'none';
         adminApp.style.display = 'flex';
         loadAllAdminData();
@@ -76,7 +77,7 @@ function initAuth() {
   };
 
   btnLock.onclick = () => {
-    sessionStorage.removeItem('ecoswap_admin_authed');
+    sessionStorage.removeItem('swapshop_admin_authed');
     adminApp.style.display = 'none';
     authScreen.style.display = 'flex';
     passInput.value = '';
@@ -142,6 +143,7 @@ async function loadInventory() {
       renderInventoryTable();
       renderSynonymDirectory();
       populateTargetItemSelect();
+      renderUnlinkedItems();
     }
   } catch (e) {}
 }
@@ -342,10 +344,32 @@ function populateTargetItemSelect() {
 // ==========================================================================
 function initCategoryManagement() {
   const form = document.getElementById('formCreateCategory');
+  const catIconInput = document.getElementById('catIconInput');
+  const catIconPreview = document.getElementById('catIconPreview');
+
+  function normalizeIconName(v) {
+    v = (v || '').trim().toLowerCase().replace(/\s+/g, '-');
+    if (!v) return 'ph-tag';
+    return v.startsWith('ph-') ? v : 'ph-' + v;
+  }
+
+  function updateIconPreview() {
+    const n = normalizeIconName(catIconInput.value);
+    catIconPreview.className = 'ph cat-icon-preview ' + n;
+    const bundled = (window.PH_ICONS || []).includes(n.replace(/^ph-/, ''));
+    catIconPreview.title = bundled ? n : n + ' (not in the bundled font set)';
+  }
+
+  if (catIconInput) {
+    catIconInput.addEventListener('input', updateIconPreview);
+    fillIconDatalist('phIconOptions');
+    updateIconPreview();
+  }
+
   form.onsubmit = async (e) => {
     e.preventDefault();
     const name = document.getElementById('catNameInput').value.trim();
-    const icon = document.getElementById('catIconSelect').value;
+    const icon = catIconInput ? normalizeIconName(catIconInput.value) : 'ph-tag';
     const desc = document.getElementById('catDescInput').value.trim();
 
     if (!name) return;
@@ -582,12 +606,14 @@ async function loadActivity() {
     const res = await fetch('/api/transactions');
     const data = await res.json();
     if (!data.success) return;
+    AdminState.transactions = data.transactions || [];
 
     const list = document.getElementById('activityTimelineList');
     if (!list) return;
 
     if (!data.transactions || data.transactions.length === 0) {
       list.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem;">No transactions logged yet.</div>';
+      renderUnlinkedItems();
       return;
     }
 
@@ -602,13 +628,101 @@ async function loadActivity() {
           <div class="timeline-header">
             <span>${actionName} (${escapeHtml(tx.user_type)})</span>
             <span class="timeline-time">${new Date(tx.timestamp).toLocaleString()}</span>
+            <button class="tx-delete-btn" title="Delete this entry" onclick="deleteTransaction('${tx.id}')"><i class="ph ph-trash"></i></button>
           </div>
           <div class="timeline-meta">${tx.accommodation ? escapeHtml(tx.accommodation) + ' • ' : ''}${tx.weight_diverted_kg || 0} kg diverted • €${tx.value_saved_eur || 0}</div>
           <div class="timeline-pills">${itemsHtml || '<span style="font-size:0.72rem; color:var(--text-muted);">General visit</span>'}</div>
         </div>
       `;
     }).join('');
+    renderUnlinkedItems();
   } catch (e) {}
+}
+
+// ==========================================================================
+// UNLINKED KIOSK ENTRIES (words that don't match the stock pool yet)
+// ==========================================================================
+window.deleteTransaction = async (id) => {
+  if (!confirm('Delete this activity entry? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      loadActivity();
+      loadAnalytics();
+    }
+  } catch (e) {}
+};
+
+function computeUnlinkedItems() {
+  const inv = AdminState.inventory;
+  const knownWords = new Set();
+  inv.forEach(it => {
+    knownWords.add((it.title || '').toLowerCase().trim());
+    (it.synonyms || []).forEach(s => knownWords.add(String(s).toLowerCase().trim()));
+  });
+  const knownIds = new Set(inv.map(i => i.id));
+  const counts = {};
+  (AdminState.transactions || []).forEach(tx => {
+    (tx.items || []).forEach(it => {
+      const word = String(it.title || '').toLowerCase().trim();
+      if (!word) return;
+      if (knownWords.has(word)) return;
+      if (it.id && knownIds.has(it.id)) return;
+      if (!counts[word]) counts[word] = { word: word, count: 0 };
+      counts[word].count += Math.max(1, parseInt(it.amount, 10) || 1);
+    });
+  });
+  return Object.values(counts).sort((a, b) => b.count - a.count);
+}
+
+function renderUnlinkedItems() {
+  const box = document.getElementById('unlinkedItemsList');
+  if (!box) return;
+  const list = computeUnlinkedItems();
+  if (!list.length) {
+    box.innerHTML = '<div class="unlinked-empty"><i class="ph ph-check-circle"></i> All kiosk entries match the stock pool. Nothing to link.</div>';
+    return;
+  }
+  box.innerHTML = list.map(u => `
+    <div class="unlinked-row">
+      <div class="unlinked-word">
+        <i class="ph ph-package"></i>
+        <strong>${escapeHtml(u.word)}</strong>
+        <span class="unlinked-count">\u00d7 ${u.count}</span>
+      </div>
+      <div class="unlinked-actions">
+        <button class="btn-secondary-sm" onclick="linkUnlinked('${escapeHtml(u.word)}')"><i class="ph ph-link"></i> Link to existing</button>
+        <button class="btn-primary-sm" onclick="createItemFromWord('${escapeHtml(u.word)}')"><i class="ph ph-plus"></i> New pool item</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.linkUnlinked = (word) => {
+  const w = document.getElementById('mapWord');
+  if (w) {
+    w.value = word;
+    const form = document.getElementById('formMapSynonymPool');
+    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    w.focus();
+  }
+};
+
+window.createItemFromWord = (word) => {
+  const form = document.getElementById('formAddNewItem');
+  if (!form) return;
+  form.reset();
+  document.getElementById('newTitle').value = word.charAt(0).toUpperCase() + word.slice(1);
+  document.getElementById('newSynonyms').value = word;
+  document.getElementById('newQty').value = 0;
+  populateCategoryDropdown('newCat');
+  document.getElementById('newItemModal').style.display = 'flex';
+};
+
+function fillIconDatalist(datalistId) {
+  const dl = document.getElementById(datalistId);
+  if (!dl || !(window.PH_ICONS || []).length) return;
+  dl.innerHTML = window.PH_ICONS.map(n => `<option value="${n}"></option>`).join('');
 }
 
 function escapeHtml(str) {
