@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoSwap | Staff Admin Portal</title>
+  
+  <!-- Phosphor Icons Local Font -->
+  <link rel="stylesheet" href="/vendor/phosphor/style.css">
+  
+  <!-- Admin Stylesheet -->
+  <link rel="stylesheet" href="/css/admin.css">
+  
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+</head>
+<body>
+
+  <!-- ADMIN AUTH GATE (Shown if not authenticated) -->
+  <div class="admin-auth-screen" id="adminAuthScreen">
+    <div class="auth-box">
+      <div class="auth-icon"><i class="ph ph-shield-check"></i></div>
+      <h2>Staff Admin Access</h2>
+      <p>Enter the swap shop staff password to manage inventory, categories, and synonym mapping.</p>
+      
+      <form id="adminLoginForm">
+        <div class="form-group">
+          <label for="adminPassInput">Admin Password</label>
+          <div class="input-wrap">
+            <i class="ph ph-lock-key"></i>
+            <input type="password" id="adminPassInput" placeholder="Password (default: swapadmin)" required autofocus />
+          </div>
+        </div>
+        <div class="auth-hint">Default password: <code>swapadmin</code></div>
+        <div id="authErrorMsg" class="auth-err" style="display: none;"></div>
+        <button type="submit" class="btn-auth-submit">
+          <i class="ph ph-sign-in"></i> Unlock Admin Panel
+        </button>
+      </form>
+      <div class="auth-back-link">
+        <a href="/"><i class="ph ph-arrow-left"></i> Return to User Kiosk</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PORTAL MAIN APP (Shown after authentication) -->
+  <div class="admin-app" id="adminApp" style="display: none;">
+    <!-- Top Header -->
+    <header class="admin-top-header">
+      <div class="header-brand">
+        <div class="logo-box"><i class="ph ph-shield-check"></i></div>
+        <div>
+          <div class="title-row">
+            <h1>EcoSwap Admin</h1>
+            <span class="staff-badge"><i class="ph ph-check-circle"></i> Staff Logged In</span>
+          </div>
+          <div class="sub-row">Swap Shop Inventory & Circulation Hub</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <a href="/" target="_blank" class="btn-header-link" title="Open student kiosk in new tab">
+          <i class="ph ph-arrow-square-out"></i> Open Kiosk
+        </a>
+        <button class="btn-header-lock" id="btnLockAdminSession" title="Lock admin portal">
+          <i class="ph ph-lock"></i> Lock Admin
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="admin-nav-bar">
+      <button class="nav-btn active" data-tab="inventory">
+        <i class="ph ph-package"></i> Stock Inventory
+      </button>
+      <button class="nav-btn" data-tab="synonyms">
+        <i class="ph ph-tree-structure"></i> Synonyms & Pool Mapping
+      </button>
+      <button class="nav-btn" data-tab="categories">
+        <i class="ph ph-folder-simple"></i> Categories Setup
+      </button>
+      <button class="nav-btn" data-tab="analytics">
+        <i class="ph ph-chart-donut"></i> Demographics & Impact
+      </button>
+      <button class="nav-btn" data-tab="activity">
+        <i class="ph ph-list-bullets"></i> Live Activity Trail
+      </button>
+    </nav>
+
+    <!-- Content Tabs -->
+    <main class="admin-main-container">
+
+      <!-- TAB 1: STOCK INVENTORY -->
+      <section class="tab-section active" id="sec-inventory">
+        <div class="section-toolbar">
+          <div class="search-box">
+            <i class="ph ph-magnifying-glass"></i>
+            <input type="text" id="invSearchInput" placeholder="Search generic items or synonyms..." />
+          </div>
+          <div class="toolbar-btns">
+            <button class="btn-primary-sm" id="btnOpenNewItemModal">
+              <i class="ph ph-plus-circle"></i> Add Generic Item
+            </button>
+            <button class="btn-secondary-sm" id="btnRefreshInv">
+              <i class="ph ph-arrows-clockwise"></i> Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="category-pills-row" id="invCategoryFilterBar"></div>
+
+        <div class="table-container-card">
+          <table class="admin-data-table">
+            <thead>
+              <tr>
+                <th>Generic Item</th>
+                <th>Category</th>
+                <th>Stock Pool</th>
+                <th>Weight</th>
+                <th>Est. Value</th>
+                <th>CO₂ Factor</th>
+                <th>Synonyms Registered</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="invTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 2: SYNONYM & POOL MAPPING ASSISTANT -->
+      <section class="tab-section" id="sec-synonyms" style="display: none;">
+        <div class="synonym-banner">
+          <div class="banner-icon"><i class="ph ph-arrows-split"></i></div>
+          <div>
+            <h3>Synonym & Stock Pool Linker</h3>
+            <p>Visitors frequently describe items using diverse words (e.g. <em>"skillet"</em> for Pan, <em>"beaker"</em> for Mug, <em>"comforter"</em> for Duvet). Map new words directly to an existing item's pool and adjust the stock quantity.</p>
+          </div>
+        </div>
+
+        <div class="mapping-tool-card">
+          <h4><i class="ph ph-link"></i> Map Word / Submission to Existing Item Pool</h4>
+          <form id="formMapSynonymPool">
+            <div class="form-grid">
+              <div class="grid-col-4">
+                <label for="mapWord">Entered Word / Submission *</label>
+                <input type="text" id="mapWord" required placeholder="e.g. skillet, beaker, flatware, comforter" />
+              </div>
+              <div class="grid-col-4">
+                <label for="mapTargetItem">Target Generic Item *</label>
+                <select id="mapTargetItem" required></select>
+              </div>
+              <div class="grid-col-2">
+                <label for="mapDeltaQty">Stock Adjustment (+/-)</label>
+                <input type="number" id="mapDeltaQty" value="0" placeholder="+1, +2, -1" />
+              </div>
+              <div class="grid-col-2 btn-col">
+                <button type="submit" class="btn-primary-sm" style="height: 42px; width: 100%;">
+                  <i class="ph ph-check"></i> Map & Update
+                </button>
+              </div>
+            </div>
+          </form>
+          <div id="mapFeedback" class="feedback-badge" style="display: none;"></div>
+        </div>
+
+        <div class="directory-container">
+          <h4><i class="ph ph-books"></i> Current Item Synonym Directory</h4>
+          <div class="directory-grid" id="synonymDirectoryGrid"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: CATEGORIES SETUP -->
+      <section class="tab-section" id="sec-categories" style="display: none;">
+        <div class="categories-layout">
+          <!-- Add Category Form -->
+          <div class="card-box">
+            <h4><i class="ph ph-plus-circle"></i> Create New Item Category</h4>
+            <form id="formCreateCategory">
+              <div class="form-group">
+                <label for="catNameInput">Category Name *</label>
+                <input type="text" id="catNameInput" required placeholder="e.g. Sports & Outdoors, Games & Hobbies" />
+              </div>
+              <div class="form-group">
+                <label for="catIconSelect">Phosphor Icon</label>
+                <select id="catIconSelect">
+                  <option value="ph-tag">ph-tag (Default Tag)</option>
+                  <option value="ph-cooking-pot">ph-cooking-pot (Kitchen)</option>
+                  <option value="ph-book-open">ph-book-open (Study)</option>
+                  <option value="ph-t-shirt">ph-t-shirt (Clothing)</option>
+                  <option value="ph-bed">ph-bed (Bedding)</option>
+                  <option value="ph-plug">ph-plug (Electronics)</option>
+                  <option value="ph-armchair">ph-armchair (Furniture)</option>
+                  <option value="ph-bicycle">ph-bicycle (Sports)</option>
+                  <option value="ph-game-controller">ph-game-controller (Hobbies)</option>
+                  <option value="ph-paint-brush">ph-paint-brush (Crafts & Art)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="catDescInput">Description</label>
+                <input type="text" id="catDescInput" placeholder="Brief description of category items" />
+              </div>
+              <button type="submit" class="btn-primary-sm" style="width: 100%; height: 42px;">
+                <i class="ph ph-folder-plus"></i> Save Category
+              </button>
+            </form>
+          </div>
+
+          <!-- Existing Categories List -->
+          <div class="card-box">
+            <h4><i class="ph ph-folders"></i> Existing Categories (<span id="catTotalBadge">0</span>)</h4>
+            <table class="admin-data-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Icon</th>
+                  <th>Items</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="categoriesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: DEMOGRAPHICS & IMPACT -->
+      <section class="tab-section" id="sec-analytics" style="display: none;">
+        <div class="eco-hero-card">
+          <div class="eco-badge"><i class="ph ph-plant"></i> Circular Economy Milestones</div>
+          <h2>Swap Shop Community Impact</h2>
+          <div class="eco-stats-grid">
+            <div class="stat-cell">
+              <i class="ph ph-recycle"></i>
+              <div class="val" id="statItemsSwapped">0</div>
+              <div class="lbl">Items Reused</div>
+            </div>
+            <div class="stat-cell">
+              <i class="ph ph-scales"></i>
+              <div class="val" id="statWeightDiverted">0 kg</div>
+              <div class="lbl">Landfill Diverted</div>
+            </div>
+            <div class="stat-cell">
+              <i class="ph ph-cloud-fog"></i>
+              <div class="val" id="statCo2Avoided">0 kg</div>
+              <div class="lbl">CO₂e Avoided</div>
+            </div>
+            <div class="stat-cell">
+              <i class="ph ph-currency-eur"></i>
+              <div class="val" id="statMoneySaved">€0</div>
+              <div class="lbl">Student Value Saved</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="analytics-row">
+          <div class="card-box">
+            <h4><i class="ph ph-users-three"></i> User Classification</h4>
+            <div class="progress-wrap">
+              <div class="lbl-row">
+                <span><i class="ph ph-graduation-cap"></i> Students</span>
+                <span id="studCount">0 (0%)</span>
+              </div>
+              <div class="track"><div class="fill green" id="barStudents"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="lbl-row">
+                <span><i class="ph ph-user"></i> Non-Students</span>
+                <span id="nonStudCount">0 (0%)</span>
+              </div>
+              <div class="track"><div class="fill slate" id="barNonStudents"></div></div>
+            </div>
+            <div class="split-pill-box">
+              <div class="pill-side"><i class="ph ph-airplane-takeoff"></i> <span id="intlCount">0</span> Intl</div>
+              <div class="pill-side"><i class="ph ph-house-line"></i> <span id="domCount">0</span> Domestic</div>
+            </div>
+          </div>
+
+          <div class="card-box">
+            <h4><i class="ph ph-buildings"></i> Accommodations Breakdown</h4>
+            <div id="accomListBody" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+          </div>
+
+          <div class="card-box">
+            <h4><i class="ph ph-calendar-dots"></i> Length of Stay</h4>
+            <div id="stayListBody" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: ACTIVITY LOG -->
+      <section class="tab-section" id="sec-activity" style="display: none;">
+        <div class="card-box">
+          <h4><i class="ph ph-clock-counter-clockwise"></i> Live Swap & Step Activity Trail</h4>
+          <div class="timeline" id="activityTimelineList"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: ADD GENERIC ITEM -->
+  <div class="modal-backdrop" id="newItemModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="ph ph-plus-circle"></i> Add Generic Item</h3>
+        <button class="btn-close" id="btnCloseNewItemModal"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="formAddNewItem">
+          <div class="form-group">
+            <label for="newTitle">Generic Item Title *</label>
+            <input type="text" id="newTitle" required placeholder="e.g. Mug, Pan, Pillow, Fork" />
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="newCat">Category *</label>
+              <select id="newCat" required></select>
+            </div>
+            <div class="form-group col-3">
+              <label for="newQty">Stock Pool</label>
+              <input type="number" id="newQty" value="1" min="0" required />
+            </div>
+            <div class="form-group col-3">
+              <label for="newUnit">Unit</label>
+              <input type="text" id="newUnit" value="pcs" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label for="newWeight">Weight (kg)</label>
+              <input type="number" id="newWeight" value="0.5" step="0.05" required />
+            </div>
+            <div class="form-group col-4">
+              <label for="newValue">Value Saved (€)</label>
+              <input type="number" id="newValue" value="10.0" step="0.5" required />
+            </div>
+            <div class="form-group col-4">
+              <label for="newCo2">CO₂ Factor (kg)</label>
+              <input type="number" id="newCo2" value="2.5" step="0.1" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="newSynonyms">Synonyms (comma-separated)</label>
+            <input type="text" id="newSynonyms" placeholder="e.g. cup, muggie, coffee cup" />
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary-sm" id="btnCancelNewItem">Cancel</button>
+            <button type="submit" class="btn-primary-sm"><i class="ph ph-floppy-disk"></i> Save Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT ITEM PARAMETERS -->
+  <div class="modal-backdrop" id="editItemModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="ph ph-pencil-simple"></i> Edit Item Parameters & Values</h3>
+        <button class="btn-close" id="btnCloseEditModal"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="formEditItemDetails">
+          <input type="hidden" id="editId" />
+          <div class="form-group">
+            <label for="editTitle">Generic Item Title *</label>
+            <input type="text" id="editTitle" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="editCat">Category *</label>
+              <select id="editCat" required></select>
+            </div>
+            <div class="form-group col-3">
+              <label for="editQty">Stock Pool</label>
+              <input type="number" id="editQty" min="0" required />
+            </div>
+            <div class="form-group col-3">
+              <label for="editUnit">Unit</label>
+              <input type="text" id="editUnit" value="pcs" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label for="editWeight">Weight (kg)</label>
+              <input type="number" id="editWeight" step="0.01" required />
+            </div>
+            <div class="form-group col-4">
+              <label for="editValue">Value Saved (€)</label>
+              <input type="number" id="editValue" step="0.1" required />
+            </div>
+            <div class="form-group col-4">
+              <label for="editCo2">CO₂ Factor (kg)</label>
+              <input type="number" id="editCo2" step="0.1" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="editSynonyms">Synonyms (comma-separated)</label>
+            <input type="text" id="editSynonyms" />
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary-sm" id="btnCancelEdit">Cancel</button>
+            <button type="submit" class="btn-primary-sm"><i class="ph ph-floppy-disk"></i> Update Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Application Logic -->
+  <script src="/js/admin.js"></script>
+</body>
+</html>

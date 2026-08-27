@@ -1,0 +1,170 @@
+[
+  {
+    "id": "tx-1787813326933",
+    "timestamp": "2026-08-27T06:48:46.932Z",
+    "sessionId": "test_step_ses",
+    "user_type": "student",
+    "is_international": "international",
+    "accommodation": "Parkside Student Residence",
+    "stay_duration": "1 Academic Year (9-12 months)",
+    "action_type": "drop-off",
+    "items": [
+      {
+        "id": "item-fork",
+        "title": "Fork",
+        "amount": 2,
+        "category": "Kitchenware"
+      },
+      {
+        "id": "item-pillow",
+        "title": "Pillow",
+        "amount": 1,
+        "category": "Bedding & Linen"
+      }
+    ],
+    "weight_diverted_kg": 0.92,
+    "value_saved_eur": 15,
+    "co2_saved_kg": 3.6,
+    "notes": "CF Form completed - 2 item(s) processed"
+  },
+  {
+    "id": "tx-1787760612318",
+    "timestamp": "2026-08-26T16:10:12.318Z",
+    "sessionId": "test_ses_pickup",
+    "user_type": "student",
+    "is_international": "domestic",
+    "accommodation": "Oakwood Student Village",
+    "stay_duration": "1 Semester (4-6 months)",
+    "action_type": "pick-up",
+    "items": [
+      {
+        "id": "item-02",
+        "title": "Electric Water Kettle",
+        "amount": 1,
+        "category": "Kitchenware"
+      }
+    ],
+    "weight_diverted_kg": 1.2,
+    "value_saved_eur": 18,
+    "notes": "CF Form completed - 1 item(s) processed"
+  },
+  {
+    "id": "tx-1787760608273",
+    "timestamp": "2026-08-26T16:10:08.272Z",
+    "sessionId": "test_ses_001",
+    "user_type": "student",
+    "is_international": "international",
+    "accommodation": "Parkside Student Residence",
+    "stay_duration": "1 Academic Year (9-12 months)",
+    "action_type": "drop-off",
+    "items": [
+      {
+        "id": "item-01",
+        "title": "Ceramic Coffee Mug",
+        "amount": 2,
+        "category": "Kitchenware"
+      }
+    ],
+    "weight_diverted_kg": 0.7,
+    "value_saved_eur": 8,
+    "notes": "CF Form completed - 1 item(s) processed"
+  },
+  {
+    "id": "tx-1001",
+    "timestamp": "2026-08-25T14:22:10.000Z",
+    "user_type": "student",
+    "is_international": true,
+    "accommodation": "Parkside Student Residence",
+    "stay_duration": "1 Academic Year (9-12 months)",
+    "action_type": "drop-off",
+    "items": [
+      {
+        "id": "item-02",
+        "title": "Electric Water Kettle",
+        "amount": 1,
+        "category": "Kitchenware"
+      },
+      {
+        "id": "item-01",
+        "title": "Ceramic Coffee Mug",
+        "amount": 2,
+        "category": "Kitchenware"
+      }
+    ],
+    "notes": "Graduating exchange student leaving dorm items.",
+    "weight_diverted_kg": 1.9,
+    "value_saved_eur": 26
+  },
+  {
+    "id": "tx-1002",
+    "timestamp": "2026-08-25T16:05:40.000Z",
+    "user_type": "student",
+    "is_international": false,
+    "accommodation": "Private Accommodation",
+    "stay_duration": "Full Degree (2-4+ years)",
+    "action_type": "pick-up",
+    "items": [
+      {
+        "id": "item-10",
+        "title": "Adjustable LED Desk Lamp",
+        "amount": 1,
+        "category": "Study & Books"
+      },
+      {
+        "id": "item-25",
+        "title": "Clothes Wooden/Plastic Hangers (Set of 5)",
+        "amount": 2,
+        "category": "Bedding & Linen"
+      }
+    ],
+    "notes": "Setting up study desk for new term.",
+    "weight_diverted_kg": 1.6,
+    "value_saved_eur": 30
+  },
+  {
+    "id": "tx-1003",
+    "timestamp": "2026-08-26T09:45:15.000Z",
+    "user_type": "non-student",
+    "is_international": null,
+    "accommodation": null,
+    "stay_duration": null,
+    "action_type": "drop-off",
+    "items": [
+      {
+        "id": "item-16",
+        "title": "Fleece Hoodie / Pullover",
+        "amount": 3,
+        "category": "Clothing & Footwear"
+      },
+      {
+        "id": "item-14",
+        "title": "Student Backpack / Rucksack",
+        "amount": 1,
+        "category": "Study & Books"
+      }
+    ],
+    "notes": "Local resident donation to university circular hub.",
+    "weight_diverted_kg": 2.6,
+    "value_saved_eur": 79
+  },
+  {
+    "id": "tx-1004",
+    "timestamp": "2026-08-26T11:30:22.000Z",
+    "user_type": "student",
+    "is_international": true,
+    "accommodation": "Riverfront Campus Towers",
+    "stay_duration": "1 Semester (4-6 months)",
+    "action_type": "return",
+    "items": [
+      {
+        "id": "item-28",
+        "title": "Compact Electric Desk Fan",
+        "amount": 1,
+        "category": "Electronics"
+      }
+    ],
+    "notes": "Summer semester finished, returning borrowed fan.",
+    "weight_diverted_kg": 1.1,
+    "value_saved_eur": 16
+  }
+]

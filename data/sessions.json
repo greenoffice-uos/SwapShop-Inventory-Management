@@ -1,0 +1,74 @@
+{
+  "test_ses_001": {
+    "id": "test_ses_001",
+    "createdAt": "2026-08-26T16:09:58.803Z",
+    "lastUpdated": "2026-08-26T16:10:01.805Z",
+    "status": "completed",
+    "currentStep": "2.1",
+    "stepHistory": [
+      {
+        "step": "1",
+        "stepName": "Student vs Non-Student",
+        "savedAt": "2026-08-26T16:09:58.803Z",
+        "payload": {
+          "user_type": "student"
+        }
+      },
+      {
+        "step": "2.1",
+        "stepName": "International Status",
+        "savedAt": "2026-08-26T16:10:01.805Z",
+        "payload": {
+          "is_international": "international"
+        }
+      },
+      {
+        "step": "completed",
+        "stepName": "Transaction Finalized",
+        "savedAt": "2026-08-26T16:10:08.272Z",
+        "payload": {
+          "transactionId": "tx-1787760608273"
+        }
+      }
+    ],
+    "data": {
+      "user_type": "student",
+      "is_international": "international",
+      "accommodation": "Parkside Student Residence",
+      "stay_duration": "1 Academic Year (9-12 months)",
+      "action_type": "drop-off",
+      "items": [
+        {
+          "id": "item-01",
+          "title": "Ceramic Coffee Mug",
+          "amount": 2,
+          "category": "Kitchenware"
+        }
+      ]
+    },
+    "completedAt": "2026-08-26T16:10:08.272Z",
+    "transactionId": "tx-1787760608273"
+  },
+  "test_step_ses": {
+    "id": "test_step_ses",
+    "createdAt": "2026-08-27T06:48:44.082Z",
+    "lastUpdated": "2026-08-27T06:48:44.082Z",
+    "status": "completed",
+    "currentStep": "3",
+    "stepHistory": [
+      {
+        "step": "3",
+        "stepName": "Action Type",
+        "savedAt": "2026-08-27T06:48:44.082Z",
+        "payload": {
+          "action_type": "drop-off"
+        }
+      }
+    ],
+    "data": {
+      "action_type": "drop-off"
+    },
+    "completedAt": "2026-08-27T06:48:46.932Z",
+    "transactionId": "tx-1787813326933"
+  }
+}

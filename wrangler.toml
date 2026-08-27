@@ -1,0 +1,9 @@
+name = "ecoswap-shop"
+compatibility_date = "2026-08-27"
+pages_build_output_dir = "public"
+
+# Optional: Cloudflare KV namespace for global persistence
+# Create via: npx wrangler kv:namespace create ECOSWAP_KV
+# [[kv_namespaces]]
+# binding = "ECOSWAP_KV"
+# id = "your-kv-namespace-id"

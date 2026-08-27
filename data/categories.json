@@ -1,0 +1,50 @@
+[
+  {
+    "id": "cat-kitchenware",
+    "name": "Kitchenware",
+    "icon": "ph-cooking-pot",
+    "description": "Cookware, tableware, mugs, cutlery, and kitchen gear"
+  },
+  {
+    "id": "cat-study",
+    "name": "Study & Books",
+    "icon": "ph-book-open",
+    "description": "Textbooks, stationery, notebooks, backpacks, study lights"
+  },
+  {
+    "id": "cat-clothing",
+    "name": "Clothing & Footwear",
+    "icon": "ph-t-shirt",
+    "description": "Clean warm clothes, coats, sweaters, shoes, and scarves"
+  },
+  {
+    "id": "cat-bedding",
+    "name": "Bedding & Linen",
+    "icon": "ph-bed",
+    "description": "Pillows, duvets, blankets, fresh sheets, and towels"
+  },
+  {
+    "id": "cat-electronics",
+    "name": "Electronics",
+    "icon": "ph-plug",
+    "description": "Chargers, extension cords, desk fans, small appliances"
+  },
+  {
+    "id": "cat-furniture",
+    "name": "Furniture & Decor",
+    "icon": "ph-armchair",
+    "description": "Chairs, sofas, mirrors, plants, and room accessories"
+  },
+  {
+    "id": "cat-misc",
+    "name": "Miscellaneous",
+    "icon": "ph-package",
+    "description": "General items and unclassified donations"
+  },
+  {
+    "id": "cat-1787813324057",
+    "name": "Sports & Fitness",
+    "icon": "ph-bicycle",
+    "description": "Yoga mats, weights, balls, rackets"
+  }
+]

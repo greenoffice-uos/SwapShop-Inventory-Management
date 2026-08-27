@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>EcoSwap | Guided Swap Kiosk</title>
+  
+  <!-- Phosphor Icons Local Font -->
+  <link rel="stylesheet" href="vendor/phosphor/style.css">
+  
+  <!-- Mobile Kiosk CSS -->
+  <link rel="stylesheet" href="css/mobile.css">
+  
+  <!-- Favicon with Phosphor Recycle -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>♻️</text></svg>">
+</head>
+<body class="mobile-kiosk-body">
+
+  <!-- Mobile Top App Bar (Minimal, clean, distraction-free) -->
+  <header class="mobile-app-header">
+    <div class="header-left">
+      <div class="app-logo">
+        <i class="ph ph-recycle"></i>
+      </div>
+      <div class="app-title-box">
+        <div class="app-title">EcoSwap</div>
+        <div class="app-sub">Campus Swap Shop</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Live Auto-Save Status Pill -->
+      <div class="save-status-pill idle" id="saveIndicator">
+        <i class="ph ph-cloud-check" id="saveIcon"></i>
+        <span id="saveText">Ready</span>
+      </div>
+
+      <!-- Quick Reset Button -->
+      <button class="btn-icon-header" id="btnRestartKiosk" title="Start over">
+        <i class="ph ph-arrow-counter-clockwise"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Banner for Resuming Session (if reloaded) -->
+  <div class="session-resume-banner" id="sessionResumeBanner" style="display: none;">
+    <div class="banner-content">
+      <i class="ph ph-arrow-clockwise"></i>
+      <span id="resumeBannerText">Resuming saved swap...</span>
+      <div class="banner-actions">
+        <button class="btn btn-sm btn-primary" id="btnResumeSession">Resume</button>
+        <button class="btn btn-sm btn-secondary" id="btnDiscardSession">New</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Mobile Chat Container (Fills entire screen) -->
+  <main class="mobile-chat-viewport" id="cfChatWindow">
+    <div class="chat-thread" id="chatThread">
+      <!-- Dynamic Bot and User Messages Rendered Here -->
+    </div>
+
+    <!-- Typing indicator bubble -->
+    <div class="typing-indicator" id="typingIndicator" style="display: none;">
+      <div class="bot-avatar"><i class="ph ph-recycle"></i></div>
+      <div class="typing-bubbles">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </main>
+
+  <!-- Semantic HTML Form (Conversational Form specification compliant) -->
+  <form id="swap-cf-form" data-cf-form class="cf-hidden-form" style="display: none;">
+    <fieldset cf-questions="Welcome to EcoSwap! Are you currently a student or visiting as a non-student?">
+      <label for="cf_type_student">Student
+        <input type="radio" name="user_type" id="cf_type_student" value="student">
+      </label>
+      <label for="cf_type_nonstudent">Non-student
+        <input type="radio" name="user_type" id="cf_type_nonstudent" value="non-student">
+      </label>
+    </fieldset>
+
+    <fieldset cf-questions="Are you an international student or domestic/home student?" cf-conditional-user_type="student">
+      <label for="cf_intl_yes">International Student
+        <input type="radio" name="is_international" id="cf_intl_yes" value="international">
+      </label>
+      <label for="cf_intl_no">Domestic / Home Student
+        <input type="radio" name="is_international" id="cf_intl_no" value="domestic">
+      </label>
+    </fieldset>
+
+    <select name="accommodation" cf-questions="Where do you live during your studies?" cf-conditional-user_type="student">
+      <option value="Private Accommodation">Private Accommodation</option>
+      <optgroup label="Student Residences">
+        <option value="Parkside Student Residence">Parkside Student Residence</option>
+        <option value="Oakwood Student Village">Oakwood Student Village</option>
+        <option value="Riverfront Campus Towers">Riverfront Campus Towers</option>
+        <option value="Meadow Court Flats">Meadow Court Flats</option>
+        <option value="West End College Lodge">West End College Lodge</option>
+      </optgroup>
+      <option value="Other Accommodation">Other Accommodation</option>
+    </select>
+
+    <select name="stay_duration" cf-questions="How long do you plan to stay?" cf-conditional-user_type="student">
+      <option value="Short-term / Exchange (< 4 months)">Short-term / Exchange (&lt; 4 months)</option>
+      <option value="1 Semester (4-6 months)">1 Semester (4-6 months)</option>
+      <option value="1 Academic Year (9-12 months)">1 Academic Year (9-12 months)</option>
+      <option value="Full Degree (2-4+ years)">Full Degree (2-4+ years)</option>
+      <option value="Other / Flexible">Other / Flexible</option>
+    </select>
+
+    <fieldset cf-questions="What brings you to the Swap Shop today?">
+      <label for="cf_act_dropoff">Drop-off (Donate items)
+        <input type="radio" name="action_type" id="cf_act_dropoff" value="drop-off">
+      </label>
+      <label for="cf_act_pickup">Pick-up (Take items)
+        <input type="radio" name="action_type" id="cf_act_pickup" value="pick-up">
+      </label>
+      <label for="cf_act_return">Return (Reusable / borrowed items)
+        <input type="radio" name="action_type" id="cf_act_return" value="return">
+      </label>
+    </fieldset>
+
+    <input type="text" name="items_summary" cf-questions="What did you drop off, pick up, or return? [Amount] [Item]" cf-input-placeholder="e.g. 2 mugs, 1 plate, fork...">
+  </form>
+
+  <!-- Mobile Kiosk Application Logic -->
+  <script src="js/kiosk.js"></script>
+</body>
+</html>

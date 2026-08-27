@@ -1,0 +1,1070 @@
+/* ==========================================================================
+   EcoSwap Mobile-First Kiosk Stylesheet
+   Optimized for phones & touch screens (iOS / Android / Kiosk)
+   ========================================================================== */
+
+:root {
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-light: #ecfdf5;
+  --primary-border: #a7f3d0;
+  
+  --bg-app: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-subtle: #f1f5f9;
+  
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  
+  --border-color: #e2e8f0;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 20px -4px rgba(0, 0, 0, 0.12);
+  
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.mobile-kiosk-body {
+  font-family: var(--font-family);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  line-height: 1.45;
+}
+
+.ph {
+  vertical-align: -0.15em;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   Top App Bar (Minimal, clean, mobile-optimized)
+   ========================================================================== */
+.mobile-app-header {
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.65rem 1rem;
+  padding-top: max(0.65rem, env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  z-index: 40;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.app-logo {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.3);
+}
+
+.app-title-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.app-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Live Auto-Save Pill */
+.save-status-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  transition: all 0.25s ease;
+}
+
+.save-status-pill.saving {
+  background-color: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.save-status-pill.saving i {
+  animation: spin 1s linear infinite;
+}
+
+.save-status-pill.saved {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary-border);
+}
+
+.save-status-pill.saved i {
+  animation: pulse-badge 0.6s ease;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-badge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.btn-icon-header {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.btn-icon-header:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-main);
+}
+
+/* Resume Banner */
+.session-resume-banner {
+  background-color: #fefce8;
+  border-bottom: 1px solid #fef08a;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: #854d0e;
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+/* ==========================================================================
+   Mobile Chat Viewport (Fills screen, smooth momentum scrolling)
+   ========================================================================== */
+.mobile-chat-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* Chat Rows & Bubbles */
+.chat-row {
+  display: flex;
+  gap: 0.65rem;
+  width: 100%;
+  animation: slideBubbleUp 0.22s ease-out;
+}
+
+@keyframes slideBubbleUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-row.bot {
+  align-items: flex-start;
+}
+
+.chat-row.user {
+  flex-direction: row-reverse;
+}
+
+.chat-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.chat-avatar.bot {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.chat-avatar.user {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+}
+
+.chat-bubble-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-width: 88%;
+}
+
+.bubble-text {
+  padding: 0.85rem 1.1rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-row.bot .bubble-text {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-top-left-radius: 4px;
+}
+
+.chat-row.user .bubble-text {
+  background-color: var(--primary);
+  color: white;
+  border-top-right-radius: 4px;
+  font-weight: 500;
+}
+
+.bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.chat-row.user .bubble-meta {
+  justify-content: flex-end;
+}
+
+.saved-step-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  background-color: var(--primary-light);
+  border: 1px solid var(--primary-border);
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+}
+
+/* Touch-Friendly Option Cards in Chat */
+.chat-interactive-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.option-card-btn {
+  background: white;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  color: var(--text-main);
+  min-height: 52px;
+}
+
+.option-card-btn:active {
+  transform: scale(0.98);
+  border-color: var(--primary);
+  background-color: var(--primary-light);
+}
+
+.option-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.option-card-btn:active .option-icon {
+  background-color: var(--primary);
+  color: white;
+}
+
+.option-text-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.option-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.option-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Custom Text Input inside Chat Option (Other Residence) */
+.option-custom-input-box {
+  background: white;
+  border: 1.5px dashed var(--primary-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.option-custom-input-box input {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+
+/* Typing Indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.bot-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.typing-bubbles {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  gap: 0.35rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.typing-bubbles span {
+  width: 6px;
+  height: 6px;
+  background-color: var(--text-muted);
+  border-radius: 50%;
+  animation: blink 1.2s infinite ease-in-out both;
+}
+
+.typing-bubbles span:nth-child(1) { animation-delay: -0.32s; }
+.typing-bubbles span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes blink {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* ==========================================================================
+   STEP 4: INTERACTIVE ITEM CARD INSIDE THE CHAT WINDOW
+   (Rendered directly in the conversation flow)
+   ========================================================================== */
+.chat-item-interactive-card {
+  background: white;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  animation: slideBubbleUp 0.25s ease-out;
+}
+
+.chat-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.badge-assistant {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #f5f3ff;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.hint-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Mobile Input Bar inside Chat */
+.chat-input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.field-qty {
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.field-qty label,
+.field-item label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.field-qty input {
+  width: 100%;
+  padding: 0.65rem 0.35rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-main);
+  background: white;
+}
+
+.field-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  position: relative;
+}
+
+.input-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon-wrap i.ph-magnifying-glass {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  pointer-events: none;
+}
+
+.input-icon-wrap input {
+  width: 100%;
+  padding: 0.65rem 2rem 0.65rem 2.3rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  color: var(--text-main);
+  background: white;
+}
+
+.input-icon-wrap input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.btn-clear-txt {
+  position: absolute;
+  right: 0.65rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.btn-chat-add {
+  height: 44px;
+  padding: 0 1rem;
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+/* Autocomplete Dropdown popup inside chat */
+.chat-suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+  margin-top: 0.35rem;
+}
+
+.sugg-row {
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.sugg-row:last-child {
+  border-bottom: none;
+}
+
+.sugg-row:active {
+  background-color: var(--primary-light);
+}
+
+.sugg-left-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sugg-left-box i {
+  font-size: 1.25rem;
+  color: var(--primary);
+}
+
+.sugg-title-txt {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.sugg-syn-badge {
+  font-size: 0.7rem;
+  background-color: #fef3c7;
+  color: #b45309;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  margin-left: 0.35rem;
+}
+
+.stock-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+}
+
+.stock-pill.in-stock { background: #dcfce7; color: #166534; }
+.stock-pill.out-stock { background: #fee2e2; color: #991b1b; }
+
+/* Quick Generic Chips */
+.quick-generic-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chip-label-txt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.quick-item-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-main);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.quick-item-chip:active {
+  background-color: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Selected Items in chat card */
+.chat-selected-items-box {
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.selected-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.2rem;
+}
+
+.selected-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.65rem;
+  gap: 0.5rem;
+}
+
+.selected-item-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.selected-item-info i {
+  font-size: 1.25rem;
+  color: var(--primary);
+}
+
+.selected-item-info .item-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--bg-subtle);
+  padding: 0.15rem;
+  border-radius: var(--radius-sm);
+}
+
+.btn-qty {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: white;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.qty-val {
+  min-width: 22px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.btn-del-item {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0.2rem;
+}
+
+/* Chat Card Bottom Buttons */
+.chat-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.btn-skip {
+  background: white;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-complete {
+  flex: 1;
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btn-complete:active {
+  background-color: var(--primary-hover);
+}
+
+/* ==========================================================================
+   RECEIPT CARD & BUTTONLESS PRINT
+   ========================================================================== */
+.receipt-card {
+  background: white;
+  border: 2px solid var(--primary-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow-md);
+  width: 100%;
+}
+
+.receipt-thank-banner {
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  line-height: 1.35;
+}
+
+.receipt-thank-banner.drop-off {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #14532d;
+  border: 1px solid #86efac;
+}
+
+.receipt-thank-banner.return {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #78350f;
+  border: 1px solid #fcd34d;
+}
+
+.receipt-thank-banner.pick-up {
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+  color: #0c4a6e;
+  border: 1px solid #7dd3fc;
+}
+
+.receipt-thank-banner i {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.receipt-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 0.75rem;
+}
+
+.receipt-success-icon {
+  width: 42px;
+  height: 42px;
+  background-color: var(--primary-light);
+  color: var(--primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.receipt-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.receipt-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.receipt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  background-color: var(--bg-subtle);
+  padding: 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+
+.receipt-field-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.receipt-field-val {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.receipt-items-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.receipt-items-summary h5 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.receipt-item-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.65rem;
+  background-color: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+
+.receipt-impact-box {
+  background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+  border: 1px solid var(--primary-border);
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.impact-metric .val {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.impact-metric .lbl {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Receipt Actions: ONLY Print button */
+.receipt-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+}
+
+.btn-print-receipt {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btn-print-receipt:active {
+  background-color: var(--primary-hover);
+}
+
+/* Common small button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-secondary { background: white; border-color: var(--border-color); color: var(--text-main); }
+.btn-sm { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
+
+/* ==========================================================================
+   PRINT STYLESHEET: PRINTS ONLY THE RECEIPT BOX (Zero Buttons)
+   ========================================================================== */
+@media print {
+  body.mobile-kiosk-body {
+    background: white !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide app bar, resume banner, chat thread except the receipt card */
+  .mobile-app-header,
+  .session-resume-banner,
+  .typing-indicator,
+  .chat-row {
+    display: none !important;
+  }
+
+  .mobile-chat-viewport {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .chat-thread {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .receipt-card {
+    display: block !important;
+    margin: 0 auto !important;
+    max-width: 580px !important;
+    border: 2px solid #059669 !important;
+    box-shadow: none !important;
+    padding: 20px !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* REMOVE ALL BUTTONS FROM PRINT */
+  .receipt-actions,
+  .receipt-actions * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .receipt-title {
+    color: #064e3b !important;
+  }
+}
