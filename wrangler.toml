@@ -8,6 +8,10 @@
 # project > Settings > Functions > KV Namespace Bindings,
 # variable name: swapshop_kv. The code (functions/api/[[route]].js) reads
 # env.swapshop_kv.
-name = "swapshop-inventory"
+name = "swapshop"
 compatibility_date = "2026-08-27"
 pages_build_output_dir = "public"
+
+[[kv_namespaces]]
+binding = "swapshop_kv"
+id = "7dd3858447f0450db40e1eefed3420a6"
