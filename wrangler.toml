@@ -1,13 +1,13 @@
+# Cloudflare Pages build configuration.
+#
+# Pages auto-deploy reads this file for BUILD settings only. It does NOT
+# support Workers sections such as [assets] or Workers-specific binding
+# tables — any of them aborts the deployment during config validation.
+#
+# KV binding: configure in the dashboard, not here —
+# project > Settings > Functions > KV Namespace Bindings,
+# variable name: swapshop_kv. The code (functions/api/[[route]].js) reads
+# env.swapshop_kv.
 name = "swapshop-inventory"
 compatibility_date = "2026-08-27"
 pages_build_output_dir = "public"
-
-[assets]
-directory = "./public"
-
-# Cloudflare KV binding for persistent storage
-# In Cloudflare Dashboard -> Pages -> Settings -> Functions -> KV namespace bindings:
-# Variable name: swapshop_kv
-# [[kv_namespaces]]
-# binding = "swapshop_kv"
-# id = "your-kv-namespace-id"

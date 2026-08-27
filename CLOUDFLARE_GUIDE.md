@@ -34,7 +34,7 @@ Executing user deploy command: npx wrangler deploy
 ```
 If `npx wrangler deploy` was entered in the Cloudflare build command field:
 1. Cloudflare Pages tried to execute `wrangler deploy` instead of letting Pages deploy natively.
-2. We have updated `wrangler.toml` with `[assets] directory = "./public"` and added `"build": "echo 'Static assets ready'"` to `package.json` to prevent this error.
+2. We added a build script to `package.json` and fixed `wrangler.toml` for Pages. **Do not add `[assets]` (or any other Workers section) to `wrangler.toml` on a Pages project:** Pages reads the file for build configuration and aborts the deployment with `Configuration file for Pages projects does not support "assets"`. A valid Pages `wrangler.toml` contains only `name`, `compatibility_date`, and `pages_build_output_dir` (plus optional `compatibility_flags`).
 3. The cleanest fix in your Cloudflare Dashboard is simply to **clear the "Build command" field** so it is empty.
 
 ---
