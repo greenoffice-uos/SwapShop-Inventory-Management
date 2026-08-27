@@ -1,14 +1,22 @@
 {
-  "name": "user",
+  "name": "swapshop-inventory-management",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "build": "echo 'Static assets in public/ are ready for deployment'",
+    "deploy": "npx wrangler pages deploy public"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "swapshop",
+    "circular-economy",
+    "inventory",
+    "conversational-form",
+    "cloudflare-pages"
+  ],
+  "author": "Green Office UOS",
+  "license": "MIT",
+  "description": "Guided CF Inventory System for University & Community Swap Shops",
   "dependencies": {
     "@phosphor-icons/web": "^2.1.2",
     "cors": "^2.8.6",

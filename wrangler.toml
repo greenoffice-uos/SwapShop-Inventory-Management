@@ -1,9 +1,13 @@
-name = "ecoswap-shop"
+name = "swapshop-inventory"
 compatibility_date = "2026-08-27"
 pages_build_output_dir = "public"
 
-# Optional: Cloudflare KV namespace for global persistence
-# Create via: npx wrangler kv:namespace create ECOSWAP_KV
+[assets]
+directory = "./public"
+
+# Cloudflare KV binding for persistent storage
+# In Cloudflare Dashboard -> Pages -> Settings -> Functions -> KV namespace bindings:
+# Variable name: swapshop_kv
 # [[kv_namespaces]]
-# binding = "ECOSWAP_KV"
+# binding = "swapshop_kv"
 # id = "your-kv-namespace-id"

@@ -1,7 +1,7 @@
 /**
  * Cloudflare Pages Functions - Full API Router for EcoSwap
  * Zero-config serverless backend running globally on Cloudflare Edge.
- * Persistent storage via Cloudflare KV (Namespace: ECOSWAP_KV).
+ * Persistent storage via Cloudflare KV (Namespace: swapshop_kv).
  */
 
 const DEFAULT_CATEGORIES = [
@@ -913,11 +913,12 @@ export async function onRequest(context) {
 
   // Memory fallback if KV is not bound
   globalThis._memKV = globalThis._memKV || {};
+  const kv = env.swapshop_kv || env.SWAPSHOP_KV || env.ECOSWAP_KV;
 
   async function getKV(key, fallback) {
-    if (env.ECOSWAP_KV) {
+    if (kv) {
       try {
-        const val = await env.ECOSWAP_KV.get(key, "json");
+        const val = await kv.get(key, "json");
         if (val !== null) return val;
       } catch (e) {
         console.warn("KV read error:", e);
@@ -928,9 +929,9 @@ export async function onRequest(context) {
   }
 
   async function putKV(key, data) {
-    if (env.ECOSWAP_KV) {
+    if (kv) {
       try {
-        await env.ECOSWAP_KV.put(key, JSON.stringify(data));
+        await kv.put(key, JSON.stringify(data));
       } catch (e) {
         console.warn("KV write error:", e);
       }
