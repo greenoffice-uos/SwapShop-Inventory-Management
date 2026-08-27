@@ -938,10 +938,42 @@ export async function onRequest(context) {
       try {
         await kv.put(key, JSON.stringify(data));
       } catch (e) {
-        console.warn("KV write error:", e);
+        console.error("KV write error (data held in memory only):", e);
       }
     }
     globalThis._memKV[key] = data;
+  }
+
+  // 0. KV health check (diagnostic endpoint)
+  // GET /api/kv-status -> reports whether the KV binding is active in THIS
+  // deployment and performs a live write/read/delete probe.
+  if (path === "kv-status" && method === "GET") {
+    const bindingName = env.swapshop_kv ? "swapshop_kv" : env.SWAPSHOP_KV ? "SWAPSHOP_KV" : env.ECOSWAP_KV ? "ECOSWAP_KV" : null;
+    const status = {
+      success: true,
+      kvBound: !!kv,
+      bindingName,
+      roundTrip: kv ? "not-tested" : "skipped"
+    };
+    if (kv) {
+      try {
+        const probeKey = "__kv_status_probe_" + Date.now();
+        await kv.put(probeKey, JSON.stringify({ probe: true, at: new Date().toISOString() }));
+        const readBack = await kv.get(probeKey, "json");
+        await kv.delete(probeKey);
+        status.roundTrip = readBack && readBack.probe === true ? "ok" : "failed-readback";
+        status.message = status.roundTrip === "ok"
+          ? "KV binding is active and writable. Data is being persisted."
+          : "KV binding exists but the write/read probe failed.";
+      } catch (e) {
+        status.roundTrip = "error";
+        status.error = String(e);
+        status.message = "KV binding exists but the probe raised an error (check namespace permissions).";
+      }
+    } else {
+      status.message = "No KV namespace is bound to this deployment; writes are kept in memory only and will be lost. In the Cloudflare dashboard open this Pages project > Settings > Functions > KV Namespace Bindings, add variable name 'swapshop_kv', then redeploy (Deployments > Retry).";
+    }
+    return new Response(JSON.stringify(status), { headers: corsHeaders });
   }
 
   // 1. Admin Login

@@ -84,3 +84,31 @@ If you want to test Cloudflare Pages Functions locally on your machine:
 # Run local Cloudflare Pages preview with Functions and KV simulation
 npx wrangler pages dev public --kv swapshop_kv
 ```
+
+---
+
+## 6. KV Not Persisting? Diagnose in 30 Seconds
+
+If the site "works" but nothing survives a reload, the binding is not active **in the currently deployed deployment**. The code silently falls back to in-memory storage when the binding is missing, so the app still looks fine while every write is discarded. Confirm with:
+
+```bash
+curl https://<your-project>.pages.dev/api/kv-status
+```
+
+Reading the answer:
+
+| Response | Meaning |
+| :--- | :--- |
+| `"kvBound": true, "roundTrip": "ok"` | Binding is active and writable. Persistence works. |
+| `"kvBound": false` | This deployment has **no** KV binding. Add it (Section 3), then **redeploy**. |
+| `"kvBound": true, "roundTrip": "error"` | Binding exists but writes fail (permissions on the namespace). |
+
+Common causes for `kvBound: false` even though the namespace exists:
+
+1. **The binding was added after the last deployment.** KV (and every other) binding is baked in at deploy time. Adding a binding does **not** update existing deployments — you must trigger a new one (Settings ➔ Deployments  **Retry deployment**, or push a commit).
+2. **The binding was added to the wrong object.** The Pages project and any standalone Worker each have their own binding lists. A binding on the `swapshop-inventory` Worker does nothing for the Pages project (and vice versa). Check **both** Settings ➔ Functions pages.
+3. **The namespace lives in a different Cloudflare account** than the Pages project. The namespace dropdown on the binding form only lists namespaces in the *same* account. If `swapshop_kv` does not appear in that dropdown, it was created under another account — recreate it there, or move the project.
+4. **Organization account permissions.** On an org account, the account member performing the binding needs at least **KV: Edit** (and Pages: Edit). With fewer permissions the binding section may be missing or uneditable.
+5. **The KV block in `wrangler.toml` is commented out and is not read by Pages auto-deploy anyway.** For a Git-connected Pages project, `wrangler.toml` does not configure bindings or the build; everything comes from the dashboard. Do not rely on that file.
+
+Note on the two entry points in this repo: `functions/api/[[route]].js` is the backend used by **Pages** (the root-level `worker.js` is ignored by Pages and only applies if you deploy it as a separate Worker with `wrangler deploy`). The `/api/kv-status` endpoint exists in both, so the curl check above works whichever way the project is deployed.
