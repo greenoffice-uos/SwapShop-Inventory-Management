@@ -1,7 +1,7 @@
 /**
- * Cloudflare Pages Functions - Full API Router for EcoSwap
- * Zero-config serverless backend running globally on Cloudflare Edge.
- * Persistent storage via Cloudflare KV (Namespace: swapshop_kv).
+ * Cloudflare Universal Worker for EcoSwap
+ * Supports Cloudflare Workers with Static Assets & Cloudflare Pages.
+ * KV Namespace binding: swapshop_kv
  */
 
 const DEFAULT_CATEGORIES = [
@@ -54,7 +54,6 @@ const DEFAULT_CATEGORIES = [
     "description": "Yoga mats, weights, balls, rackets"
   }
 ];
-
 const DEFAULT_INVENTORY = [
   {
     "id": "item-mug",
@@ -887,33 +886,62 @@ const DEFAULT_INVENTORY = [
     ]
   }
 ];
-
 const DEFAULT_SETTINGS = {
   adminPassword: "swapadmin",
   shopName: "EcoSwap Hub",
   co2KgPerKgGoods: 2.8
 };
 
-export async function onRequest(context) {
-  const { request, env } = context;
-  const url = new URL(request.url);
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Content-Type": "application/json; charset=utf-8"
+};
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: CORS_HEADERS });
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: CORS_HEADERS });
+    }
+
+    // 1. API Routing
+    if (url.pathname.startsWith("/api/")) {
+      return handleApi(request, env, url);
+    }
+
+    // 2. Route /admin or /admin/ to /admin.html
+    if (url.pathname === "/admin" || url.pathname === "/admin/") {
+      if (env.ASSETS) {
+        const adminUrl = new URL("/admin.html", request.url);
+        return env.ASSETS.fetch(new Request(adminUrl, request));
+      }
+    }
+
+    // 3. Static Assets via env.ASSETS (Workers with Assets)
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    return new Response("Not Found", { status: 404 });
+  }
+};
+
+async function handleApi(request, env, url) {
   const path = url.pathname.replace(/^\/api\/?/, "");
   const method = request.method;
 
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json; charset=utf-8"
-  };
-
-  if (method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  // Memory fallback if KV is not bound
-  globalThis._memKV = globalThis._memKV || {};
+  // KV binding resolver (supports swapshop_kv, SWAPSHOP_KV, ECOSWAP_KV)
   const kv = env.swapshop_kv || env.SWAPSHOP_KV || env.ECOSWAP_KV;
+
+  // In-memory fallback if KV is not bound
+  globalThis._memKV = globalThis._memKV || {};
 
   async function getKV(key, fallback, autoSeed = false) {
     if (kv) {
@@ -924,8 +952,8 @@ export async function onRequest(context) {
           await kv.put(key, JSON.stringify(fallback));
           return fallback;
         }
-      } catch (e) {
-        console.warn("KV read error:", e);
+      } catch (err) {
+        console.warn("KV read error for " + key + ":", err);
       }
     }
     if (globalThis._memKV[key] !== undefined) return globalThis._memKV[key];
@@ -937,33 +965,37 @@ export async function onRequest(context) {
     if (kv) {
       try {
         await kv.put(key, JSON.stringify(data));
-      } catch (e) {
-        console.warn("KV write error:", e);
+      } catch (err) {
+        console.warn("KV write error for " + key + ":", err);
       }
     }
     globalThis._memKV[key] = data;
   }
 
-  // 1. Admin Login
+  // -----------------------------------------------------------
+  // API Endpoints
+  // -----------------------------------------------------------
+
+  // Admin Login
   if (path === "admin/login" && method === "POST") {
     const body = await request.json().catch(() => ({}));
     const settings = await getKV("settings", DEFAULT_SETTINGS, true);
     if (body.password === settings.adminPassword || body.password === "swapadmin" || body.password === "ecoswap2026") {
-      return new Response(JSON.stringify({ success: true, message: "Admin authenticated successfully" }), { headers: corsHeaders });
+      return jsonResponse({ success: true, message: "Admin authenticated successfully" });
     }
-    return new Response(JSON.stringify({ success: false, error: "Invalid admin password" }), { status: 401, headers: corsHeaders });
+    return jsonResponse({ success: false, error: "Invalid admin password" }, 401);
   }
 
-  // 2. Categories API
+  // Categories API
   if (path === "categories") {
     let categories = await getKV("categories", DEFAULT_CATEGORIES, true);
     if (method === "GET") {
-      return new Response(JSON.stringify({ success: true, count: categories.length, categories }), { headers: corsHeaders });
+      return jsonResponse({ success: true, count: categories.length, categories });
     }
     if (method === "POST") {
       const body = await request.json().catch(() => ({}));
       if (!body.name || !body.name.trim()) {
-        return new Response(JSON.stringify({ success: false, error: "Category name is required" }), { status: 400, headers: corsHeaders });
+        return jsonResponse({ success: false, error: "Category name is required" }, 400);
       }
       const newCat = {
         id: "cat-" + Date.now(),
@@ -973,7 +1005,7 @@ export async function onRequest(context) {
       };
       categories.push(newCat);
       await putKV("categories", categories);
-      return new Response(JSON.stringify({ success: true, category: newCat }), { headers: corsHeaders });
+      return jsonResponse({ success: true, category: newCat });
     }
   }
 
@@ -982,10 +1014,10 @@ export async function onRequest(context) {
     let categories = await getKV("categories", DEFAULT_CATEGORIES, true);
     categories = categories.filter(c => c.id !== catId && c.name !== catId);
     await putKV("categories", categories);
-    return new Response(JSON.stringify({ success: true, message: "Category deleted" }), { headers: corsHeaders });
+    return jsonResponse({ success: true, message: "Category deleted" });
   }
 
-  // 3. Inventory API
+  // Inventory API
   if (path === "inventory") {
     let items = await getKV("inventory", DEFAULT_INVENTORY, true);
     if (method === "GET") {
@@ -1005,13 +1037,13 @@ export async function onRequest(context) {
           return false;
         });
       }
-      return new Response(JSON.stringify({ success: true, count: filtered.length, items: filtered }), { headers: corsHeaders });
+      return jsonResponse({ success: true, count: filtered.length, items: filtered });
     }
 
     if (method === "POST") {
       const body = await request.json().catch(() => ({}));
       if (!body.title) {
-        return new Response(JSON.stringify({ success: false, error: "Title is required" }), { status: 400, headers: corsHeaders });
+        return jsonResponse({ success: false, error: "Title is required" }, 400);
       }
       const newItem = {
         id: "item-" + Date.now(),
@@ -1030,19 +1062,19 @@ export async function onRequest(context) {
       };
       items.unshift(newItem);
       await putKV("inventory", items);
-      return new Response(JSON.stringify({ success: true, item: newItem }), { headers: corsHeaders });
+      return jsonResponse({ success: true, item: newItem });
     }
   }
 
   // Update or Delete single item
   if (path.startsWith("inventory/")) {
     const itemId = path.replace("inventory/", "");
-    let items = await getKV("inventory", DEFAULT_INVENTORY);
+    let items = await getKV("inventory", DEFAULT_INVENTORY, true);
     const idx = items.findIndex(it => it.id === itemId);
 
     if (method === "PUT") {
       if (idx === -1) {
-        return new Response(JSON.stringify({ success: false, error: "Item not found" }), { status: 404, headers: corsHeaders });
+        return jsonResponse({ success: false, error: "Item not found" }, 404);
       }
       const body = await request.json().catch(() => ({}));
       const existing = items[idx];
@@ -1058,30 +1090,30 @@ export async function onRequest(context) {
       };
       items[idx] = updated;
       await putKV("inventory", items);
-      return new Response(JSON.stringify({ success: true, item: updated }), { headers: corsHeaders });
+      return jsonResponse({ success: true, item: updated });
     }
 
     if (method === "DELETE") {
       if (idx === -1) {
-        return new Response(JSON.stringify({ success: false, error: "Item not found" }), { status: 404, headers: corsHeaders });
+        return jsonResponse({ success: false, error: "Item not found" }, 404);
       }
       items.splice(idx, 1);
       await putKV("inventory", items);
-      return new Response(JSON.stringify({ success: true, message: "Item deleted" }), { headers: corsHeaders });
+      return jsonResponse({ success: true, message: "Item deleted" });
     }
   }
 
-  // 4. Admin Synonym Mapping & Pool Update
+  // Admin Synonym Mapping & Pool Update
   if (path === "admin/map-synonym" && method === "POST") {
     const body = await request.json().catch(() => ({}));
     const { synonym, targetItemId, adjustQuantity } = body;
     if (!synonym || !targetItemId) {
-      return new Response(JSON.stringify({ success: false, error: "Both synonym and targetItemId required" }), { status: 400, headers: corsHeaders });
+      return jsonResponse({ success: false, error: "Both synonym and targetItemId required" }, 400);
     }
-    let items = await getKV("inventory", DEFAULT_INVENTORY);
+    let items = await getKV("inventory", DEFAULT_INVENTORY, true);
     const idx = items.findIndex(it => it.id === targetItemId);
     if (idx === -1) {
-      return new Response(JSON.stringify({ success: false, error: "Target item not found" }), { status: 404, headers: corsHeaders });
+      return jsonResponse({ success: false, error: "Target item not found" }, 404);
     }
     const item = items[idx];
     const cleanSyn = synonym.trim().toLowerCase();
@@ -1095,15 +1127,15 @@ export async function onRequest(context) {
     item.lastUpdated = new Date().toISOString();
     items[idx] = item;
     await putKV("inventory", items);
-    return new Response(JSON.stringify({ success: true, message: "Mapped " + cleanSyn + " to " + item.title + " (Stock now: " + item.quantity + ")", item }), { headers: corsHeaders });
+    return jsonResponse({ success: true, message: "Mapped " + cleanSyn + " to " + item.title + " (Stock now: " + item.quantity + ")", item });
   }
 
-  // 5. Session Step Save
+  // Session Step Save
   if (path === "session/step" && method === "POST") {
     const body = await request.json().catch(() => ({}));
     const { sessionId, step, stepName, stepData, fullSession } = body;
     if (!sessionId) {
-      return new Response(JSON.stringify({ success: false, error: "sessionId required" }), { status: 400, headers: corsHeaders });
+      return jsonResponse({ success: false, error: "sessionId required" }, 400);
     }
     const sessions = await getKV("sessions", {});
     const now = new Date().toISOString();
@@ -1137,7 +1169,7 @@ export async function onRequest(context) {
     });
 
     await putKV("sessions", sessions);
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       message: "Step " + step + " (" + (stepName || "") + ") saved successfully",
       sessionId,
@@ -1145,22 +1177,22 @@ export async function onRequest(context) {
       stepName,
       savedAt: now,
       sessionState: session.data
-    }), { headers: corsHeaders });
+    });
   }
 
-  // 6. Complete Session
+  // Complete Session
   if (path === "session/complete" && method === "POST") {
     const body = await request.json().catch(() => ({}));
     const { sessionId, sessionData } = body;
     const now = new Date().toISOString();
 
     const sessions = await getKV("sessions", {});
-    let inventory = await getKV("inventory", DEFAULT_INVENTORY);
+    let inventory = await getKV("inventory", DEFAULT_INVENTORY, true);
     const transactions = await getKV("transactions", []);
 
     const data = sessionData || (sessions[sessionId] ? sessions[sessionId].data : null);
     if (!data) {
-      return new Response(JSON.stringify({ success: false, error: "No session data provided" }), { status: 400, headers: corsHeaders });
+      return jsonResponse({ success: false, error: "No session data provided" }, 400);
     }
 
     const action = data.action_type || "drop-off";
@@ -1236,18 +1268,18 @@ export async function onRequest(context) {
       await putKV("sessions", sessions);
     }
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       message: "Transaction successfully processed",
       transaction: newTx,
       itemsProcessed: items.length
-    }), { headers: corsHeaders });
+    });
   }
 
-  // 7. Analytics API
+  // Analytics API
   if (path === "analytics" && method === "GET") {
     const transactions = await getKV("transactions", []);
-    const inventory = await getKV("inventory", DEFAULT_INVENTORY);
+    const inventory = await getKV("inventory", DEFAULT_INVENTORY, true);
     const sessions = await getKV("sessions", {});
 
     const totalSwaps = transactions.length;
@@ -1279,7 +1311,7 @@ export async function onRequest(context) {
     const totalStockItems = inventory.reduce((acc, it) => acc + (it.quantity || 0), 0);
     const activeSessionsCount = Object.values(sessions).filter(s => s.status === "in_progress").length;
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       totalSwaps,
       totalStockItems,
@@ -1292,14 +1324,14 @@ export async function onRequest(context) {
       demographics,
       accommodations,
       stayDurations
-    }), { headers: corsHeaders });
+    });
   }
 
-  // 8. Transactions API
+  // Transactions API
   if (path === "transactions" && method === "GET") {
     const transactions = await getKV("transactions", []);
-    return new Response(JSON.stringify({ success: true, count: transactions.length, transactions }), { headers: corsHeaders });
+    return jsonResponse({ success: true, count: transactions.length, transactions });
   }
 
-  return new Response(JSON.stringify({ error: "Endpoint not found" }), { status: 404, headers: corsHeaders });
+  return jsonResponse({ error: "Endpoint not found: " + path }, 404);
 }
