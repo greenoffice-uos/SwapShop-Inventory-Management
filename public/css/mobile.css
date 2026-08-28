@@ -984,15 +984,35 @@ body.mobile-kiosk-body {
   color: var(--text-muted);
 }
 
-/* Receipt Actions: ONLY Print button */
+/* Receipt Actions: Edit + Print (both hidden on printout) */
 .receipt-actions {
   display: flex;
   gap: 0.5rem;
   padding-top: 0.35rem;
 }
 
+.btn-edit-receipt {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background-color: white;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btn-edit-receipt:active {
+  background-color: #ecfdf5;
+}
+
 .btn-print-receipt {
-  width: 100%;
+  flex: 1;
   padding: 0.75rem 1rem;
   background-color: var(--primary);
   color: white;

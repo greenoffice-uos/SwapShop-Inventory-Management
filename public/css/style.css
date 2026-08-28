@@ -1330,6 +1330,26 @@ body {
   flex-wrap: wrap;
 }
 
+.btn-edit-receipt {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background-color: white;
+  color: var(--primary, #059669);
+  border: 2px solid var(--primary, #059669);
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btn-edit-receipt:active {
+  background-color: #ecfdf5;
+}
+
 /* ==============================================================
    TAB 2: INVENTORY CATALOG VIEW
    ============================================================== */

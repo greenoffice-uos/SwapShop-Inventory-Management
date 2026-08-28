@@ -495,6 +495,24 @@ const server = http.createServer(async (req, res) => {
 
     const action = data.action_type || 'drop-off';
     const items = Array.isArray(data.items) ? data.items : [];
+
+    // Re-completing the same session (receipt "Edit") must UPDATE the stored
+    // transaction instead of creating a duplicate. Reverse the old items'
+    // inventory effect first, then apply the new ones.
+    const existingTx = sessionId ? transactions.find(t => t.sessionId === sessionId) : null;
+    if (existingTx) {
+      const dirOld = (existingTx.action_type === 'drop-off' || existingTx.action_type === 'return') ? 1 : -1;
+      (existingTx.items || []).forEach(it => {
+        const word = String(it.title || '').toLowerCase();
+        const invItem = inventory.find(i => i.id === it.id || i.title.toLowerCase() === word || (i.synonyms || []).some(s => String(s).toLowerCase() === word));
+        if (invItem) {
+          const qty = parseInt(it.amount, 10) || 1;
+          invItem.quantity = Math.max(0, (invItem.quantity || 0) - dirOld * qty);
+          invItem.lastUpdated = now;
+        }
+      });
+    }
+
     let totalWeight = 0;
     let totalValue = 0;
     let totalCo2 = 0;
@@ -529,10 +547,7 @@ const server = http.createServer(async (req, res) => {
 
     writeJSON(INVENTORY_FILE, inventory);
 
-    const newTx = {
-      id: `tx-${Date.now()}`,
-      timestamp: now,
-      sessionId: sessionId || `ses-${Date.now()}`,
+    const txFields = {
       user_type: data.user_type || 'unspecified',
       is_international: data.is_international !== undefined ? data.is_international : null,
       accommodation: data.accommodation || null,
@@ -550,7 +565,20 @@ const server = http.createServer(async (req, res) => {
       notes: `CF Form completed - ${items.length} item(s) processed`
     };
 
-    transactions.unshift(newTx);
+    let newTx;
+    if (existingTx) {
+      // Receipt edit: patch the same transaction in place.
+      Object.assign(existingTx, txFields, { updatedAt: now });
+      newTx = existingTx;
+    } else {
+      newTx = {
+        id: `tx-${Date.now()}`,
+        timestamp: now,
+        sessionId: sessionId || `ses-${Date.now()}`,
+        ...txFields
+      };
+      transactions.unshift(newTx);
+    }
     writeJSON(TRANSACTIONS_FILE, transactions);
 
     if (sessionId && sessions[sessionId]) {
@@ -641,12 +669,26 @@ const server = http.createServer(async (req, res) => {
     let totalCo2Kg = 0;
 
     const actions = { 'drop-off': 0, 'pick-up': 0, 'return': 0 };
+    // Per-action totals: drop-off and pick-up must not feed the same bucket.
+    const byAction = {
+      'drop-off': { swaps: 0, items: 0, weightKg: 0, valueEur: 0, co2Kg: 0 },
+      'pick-up': { swaps: 0, items: 0, weightKg: 0, valueEur: 0, co2Kg: 0 },
+      'return': { swaps: 0, items: 0, weightKg: 0, valueEur: 0, co2Kg: 0 }
+    };
     const demographics = { students: 0, nonStudents: 0, international: 0, domestic: 0 };
     const accommodations = {};
     const stayDurations = {};
 
     txs.forEach(tx => {
       if (tx.action_type && actions[tx.action_type] !== undefined) actions[tx.action_type]++;
+      const perAction = byAction[tx.action_type];
+      if (perAction) {
+        perAction.swaps++;
+        if (Array.isArray(tx.items)) tx.items.forEach(it => { perAction.items += (it.amount || 1); });
+        perAction.weightKg += (tx.weight_diverted_kg || 0);
+        perAction.valueEur += (tx.value_saved_eur || 0);
+        perAction.co2Kg += (tx.co2_saved_kg || (tx.weight_diverted_kg || 0) * 2.8);
+      }
       if (tx.user_type === 'student') {
         demographics.students++;
         if (tx.is_international === true || tx.is_international === 'international') demographics.international++;
@@ -702,6 +744,20 @@ const server = http.createServer(async (req, res) => {
     const stockValueEur = inventory.reduce((s, it) => s + (parseFloat(it.est_value_eur) || 0) * (parseInt(it.quantity, 10) || 0), 0);
     const avgValuePerItem = totalItemsSwapped > 0 ? totalValueEur / totalItemsSwapped : 0;
 
+    // Net flow = items coming IN (drop-off + return) minus going OUT (pick-up).
+    const da = byAction['drop-off'], pa = byAction['pick-up'], ra = byAction['return'];
+    const netByAction = {
+      swaps: da.swaps + ra.swaps - pa.swaps,
+      items: da.items + ra.items - pa.items,
+      weightKg: parseFloat((da.weightKg + ra.weightKg - pa.weightKg).toFixed(2)),
+      valueEur: parseFloat((da.valueEur + ra.valueEur - pa.valueEur).toFixed(2)),
+      co2Kg: parseFloat((da.co2Kg + ra.co2Kg - pa.co2Kg).toFixed(2))
+    };
+    // Returns as a share of all incoming items (drop-off + return).
+    const returnSharePct = (ra.swaps + da.swaps) > 0 ? Math.round((ra.swaps / (ra.swaps + da.swaps)) * 100) : 0;
+    // Returns per person who picked up once — null when nobody has picked up.
+    const returnPerPickupPct = pa.swaps > 0 ? Math.round((ra.swaps / pa.swaps) * 100) : null;
+
     sendJSON(res, {
       success: true,
       totalSwaps,
@@ -712,6 +768,10 @@ const server = http.createServer(async (req, res) => {
       co2AvoidedKg: parseFloat(totalCo2Kg.toFixed(1)),
       totalValueEur: parseFloat(totalValueEur.toFixed(2)),
       actions,
+      byAction,
+      netByAction,
+      returnSharePct,
+      returnPerPickupPct,
       demographics,
       accommodations,
       stayDurations,

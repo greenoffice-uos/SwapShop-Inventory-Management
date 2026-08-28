@@ -209,13 +209,16 @@ function renderStep1_StudentVsNonStudent() {
         icon: 'ph-user',
         action: () => handleStep1Choice('non-student', 'Non-Student')
       }
-    ]
+    ],
+    step: '1'
   });
 }
 
 async function handleStep1Choice(value, label) {
   disableCurrentOptions();
-  addUserMessage(`I am a ${label}`, '1');
+  const bubbleText = `I am a ${label}`;
+  addUserMessage(bubbleText, '1');
+  rememberAnswerLabel('1', bubbleText);
 
   await saveStep('1', 'Student vs Non-Student', { user_type: value });
 
@@ -224,8 +227,9 @@ async function handleStep1Choice(value, label) {
     hideTyping();
     if (value === 'non-student') {
       const d = State.sessionData;
-      // Student-only answers no longer apply — clear them and remove their
-      // chat rows when the user just changed their step-1 answer.
+      // Student-only answers no longer apply — clear them when the user just
+      // changed their step-1 answer (their chat rows are dropped by the
+      // rebuild below when this was a change).
       const stepFields = { '2.1': 'is_international', '2.2': 'accommodation', '2.3': 'stay_duration' };
       Object.keys(stepFields).forEach(s => {
         if (d[stepFields[s]]) {
@@ -233,6 +237,11 @@ async function handleStep1Choice(value, label) {
           removeStepHistoryRow(s);
         }
       });
+    }
+    // Answer change: rebuild the history from saved state so stale
+    // downstream questions/answers don't linger above the live question.
+    if (inPlaceCommit) rebuildDownstream('1');
+    if (value === 'non-student') {
       addBotMessage({
         text: "Thank you for supporting community reuse! As a community member, let's jump straight to your swap items.",
         options: null
@@ -261,22 +270,26 @@ function renderStep2_1_International() {
         icon: 'ph-house-line',
         action: () => handleStep2_1Choice('domestic', 'Domestic / Home Student')
       }
-    ]
+    ],
+    step: '2.1'
   });
 }
 
 async function handleStep2_1Choice(value, label) {
   disableCurrentOptions();
   addUserMessage(label, '2.1');
+  rememberAnswerLabel('2.1', label);
 
   await saveStep('2.1', 'International Status', { is_international: value });
 
+  if (inPlaceCommit) rebuildDownstream('2.1');
   proceedAfterChoice();
 }
 
-/** Step 2.2: Accommodation */
-function renderStep2_2_Accommodation() {
-  const options = [
+/** Step 2.2: Accommodation — option list shared by the question render and
+ *  the "Change" re-open (where the custom input has consumed the cards). */
+function getStep2_2Options() {
+  return [
     {
       id: 'acc-private',
       title: 'Private Accommodation',
@@ -299,10 +312,13 @@ function renderStep2_2_Accommodation() {
       action: (btn) => showOtherAccommodationInput(btn)
     }
   ];
+}
 
+function renderStep2_2_Accommodation() {
   addBotMessage({
     text: "Where are you currently living during your studies?",
-    options
+    options: getStep2_2Options(),
+    step: '2.2'
   });
 }
 
@@ -333,10 +349,13 @@ function showOtherAccommodationInput(btn) {
 
 async function handleStep2_2Choice(choiceText) {
   disableCurrentOptions();
-  addUserMessage(`Living in: ${choiceText}`, '2.2');
+  const bubbleText = `Living in: ${choiceText}`;
+  addUserMessage(bubbleText, '2.2');
+  rememberAnswerLabel('2.2', bubbleText);
 
   await saveStep('2.2', 'Accommodation Type', { accommodation: choiceText });
 
+  if (inPlaceCommit) rebuildDownstream('2.2');
   proceedAfterChoice();
 }
 
@@ -352,16 +371,20 @@ function renderStep2_3_StayDuration() {
 
   addBotMessage({
     text: "How long do you plan to stay in the city / university?",
-    options
+    options,
+    step: '2.3'
   });
 }
 
 async function handleStep2_3Choice(durationLabel) {
   disableCurrentOptions();
-  addUserMessage(`Planned stay: ${durationLabel}`, '2.3');
+  const bubbleText = `Planned stay: ${durationLabel}`;
+  addUserMessage(bubbleText, '2.3');
+  rememberAnswerLabel('2.3', bubbleText);
 
   await saveStep('2.3', 'Stay Duration', { stay_duration: durationLabel });
 
+  if (inPlaceCommit) rebuildDownstream('2.3');
   proceedAfterChoice();
 }
 
@@ -391,15 +414,21 @@ function renderStep3_ActionType() {
         icon: 'ph-arrows-clockwise',
         action: () => handleStep3Choice('return', 'Return (Bringing items back)')
       }
-    ]
+    ],
+    step: '3'
   });
 }
 
 async function handleStep3Choice(actionType, actionLabel) {
   disableCurrentOptions();
   addUserMessage(actionLabel, '3');
+  rememberAnswerLabel('3', actionLabel);
 
   await saveStep('3', 'Swap Action Type', { action_type: actionType });
+
+  // Answer change: drop the stale thank-you + old item card first so the new
+  // thank-you lands right after the rebuilt history.
+  if (inPlaceCommit) rebuildDownstream('3');
 
   showTyping();
   setTimeout(() => {
@@ -1016,6 +1045,11 @@ async function finalizeKioskSwap() {
     hideTyping();
 
     if (result.success) {
+      // Keep the transaction id so a receipt edit re-completes the SAME
+      // entry (the server matches on sessionId) instead of duplicating it.
+      if (result.transaction && result.transaction.id) {
+        State.sessionData.transactionId = result.transaction.id;
+      }
       renderReceiptBox(result.transaction);
       localStorage.removeItem('swapshop_kiosk_session');
     }
@@ -1147,15 +1181,32 @@ function renderReceiptBox(tx) {
       </div>
     </div>
 
-    <!-- Print button ONLY (Hidden on printout) -->
+    <!-- Action buttons (hidden on printout) -->
     <div class="receipt-actions">
+      <button class="btn-edit-receipt" type="button" id="btnEditReceipt">
+        <i class="ph ph-pencil-simple"></i> Edit
+      </button>
       <button class="btn-print-receipt" onclick="window.print()">
         <i class="ph ph-printer"></i> Print Receipt Slip
       </button>
     </div>
   `;
 
+  const editBtn = card.querySelector('#btnEditReceipt');
+  if (editBtn) editBtn.onclick = () => editReceiptFromReceipt();
+
   thread.appendChild(card);
+  scrollChatBottom();
+}
+
+/**
+ * Receipt "Edit": go back to the conversation with every saved answer
+ * changeable (cards + Change chips, item list pre-filled). Re-completing
+ * updates the same transaction — no duplicate entry.
+ */
+function editReceiptFromReceipt() {
+  clearChat();
+  replaySavedChat("You're editing this receipt. Change any answer below — then press Complete again and the receipt will be updated in place (same receipt ref, no duplicate entry).");
   scrollChatBottom();
 }
 
@@ -1166,33 +1217,18 @@ function clearChat() {
   document.getElementById('chatThread').innerHTML = '';
 }
 
-function addBotMessage({ text, options = null, scroll = true }) {
+function addBotMessage({ text, options = null, scroll = true, step = null }) {
   const thread = document.getElementById('chatThread');
   const row = document.createElement('div');
   row.className = 'chat-row bot';
-
-  let optionsHtml = '';
-  if (options && Array.isArray(options)) {
-    optionsHtml = `
-      <div class="chat-interactive-options">
-        ${options.map((opt, idx) => `
-          <button type="button" class="option-card-btn" id="${opt.id || 'opt-' + idx}">
-            <div class="option-icon"><i class="ph ${opt.icon || 'ph-check'}"></i></div>
-            <div class="option-text-group">
-              <span class="option-title">${escapeHtml(opt.title)}</span>
-              ${opt.desc ? `<span class="option-desc">${escapeHtml(opt.desc)}</span>` : ''}
-            </div>
-          </button>
-        `).join('')}
-      </div>
-    `;
-  }
+  // Tag question rows with their step so the history rebuild / card re-arming
+  // can find exactly the right question (no cross-wiring between steps).
+  if (step) row.dataset.questionStep = String(step);
 
   row.innerHTML = `
     <div class="chat-avatar bot"><img src="images/logo-square.png" alt=""></div>
     <div class="chat-bubble-content">
       <div class="bubble-text">${text}</div>
-      ${optionsHtml}
       <div class="bubble-meta">
         <span>Global Belongings Assistant</span>
         <span>•</span>
@@ -1201,20 +1237,44 @@ function addBotMessage({ text, options = null, scroll = true }) {
     </div>
   `;
 
+  if (options && Array.isArray(options)) buildOptionCards(row, options);
+
   thread.appendChild(row);
 
-  if (options && Array.isArray(options)) {
-    options.forEach((opt, idx) => {
-      const btn = row.querySelector(`#${opt.id || 'opt-' + idx}`);
-      if (btn && opt.action) {
-        // Keep the original action so the in-place change flow can restore it.
-        btn.__origAction = () => opt.action(btn);
-        btn.onclick = btn.__origAction;
-      }
-    });
-  }
-
   if (scroll) scrollChatBottom();
+}
+
+/**
+ * Build the option-card box inside a bot question row and wire each card's
+ * action. Shared by addBotMessage (fresh questions) and the accommodation
+ * re-open flow (restore cards after the custom input consumed them).
+ */
+function buildOptionCards(row, options) {
+  const content = row.querySelector('.chat-bubble-content');
+  if (!content) return;
+  const box = document.createElement('div');
+  box.className = 'chat-interactive-options';
+  box.innerHTML = options.map((opt, idx) => `
+    <button type="button" class="option-card-btn" id="${opt.id || 'opt-' + idx}">
+      <div class="option-icon"><i class="ph ${opt.icon || 'ph-check'}"></i></div>
+      <div class="option-text-group">
+        <span class="option-title">${escapeHtml(opt.title)}</span>
+        ${opt.desc ? `<span class="option-desc">${escapeHtml(opt.desc)}</span>` : ''}
+      </div>
+    </button>
+  `).join('');
+  const meta = content.querySelector('.bubble-meta');
+  if (meta) content.insertBefore(box, meta);
+  else content.appendChild(box);
+
+  options.forEach((opt, idx) => {
+    const btn = box.querySelector(`#${opt.id || 'opt-' + idx}`);
+    if (btn && opt.action) {
+      // Keep the original action so the in-place change flow can restore it.
+      btn.__origAction = () => opt.action(btn);
+      btn.onclick = btn.__origAction;
+    }
+  });
 }
 
 // When set (a step key), the next addUserMessage for that step updates the
@@ -1328,6 +1388,16 @@ function prepareInPlaceChange(step) {
   State.currentStep = step;
 
   if (qRow) {
+    // Accommodation: choosing "Other" replaced the option cards with a custom
+    // input box — restore the cards so the change flow can tap a new answer.
+    if (step === '2.2' && !qRow.querySelector('.option-card-btn')) {
+      const content = qRow.querySelector('.chat-bubble-content');
+      if (content) {
+        const old = content.querySelector('.chat-interactive-options');
+        if (old) old.remove();
+        buildOptionCards(qRow, getStep2_2Options());
+      }
+    }
     qRow.querySelectorAll('.option-card-btn').forEach(b => {
       b.disabled = false;
       b.classList.remove('option-past');
@@ -1349,12 +1419,14 @@ function rearmPastOptionCards() {
   thread.querySelectorAll('.chat-row.user').forEach(userRow => {
     const stepBtn = userRow.querySelector('[data-change-step]');
     if (!stepBtn) return;
+    const step = stepBtn.getAttribute('data-change-step');
     let el = userRow.previousElementSibling;
     while (el) {
-      const btns = el.querySelectorAll ? el.querySelectorAll('.option-card-btn') : [];
-      if (btns.length) {
-        const step = stepBtn.getAttribute('data-change-step');
-        btns.forEach(b => {
+      if (el.classList && el.classList.contains('user')) break; // never walk past an earlier answer
+      // The tagged question row for this answer — stop here whether or not
+      // it still has option cards (e.g. accommodation's custom input box).
+      if (el.dataset && el.dataset.questionStep === step) {
+        el.querySelectorAll('.option-card-btn').forEach(b => {
           b.disabled = false;
           b.classList.add('option-past');
           b.title = 'Tap to change your answer to this';
@@ -1364,7 +1436,7 @@ function rearmPastOptionCards() {
             ? () => { prepareInPlaceChange(step); b.__origAction(b); }
             : () => changeStepAnswer(step);
         });
-        return;
+        break;
       }
       el = el.previousElementSibling;
     }
@@ -1410,28 +1482,17 @@ function proceedAfterChoice() {
   }, 350);
 }
 
-function replaySavedChat() {
+function replaySavedChat(introText = "Welcome back! Resuming your saved swap.") {
   const d = State.sessionData;
   if (d.user_type) {
-    addBotMessage({ text: "Welcome back! Resuming your saved swap.", options: null });
-    renderStep1_StudentVsNonStudent();
-    addUserMessage(`I am a ${d.user_type === 'student' ? 'Student' : 'Non-Student'}`, '1');
-  }
-  if (d.user_type === 'student' && d.is_international) {
-    renderStep2_1_International();
-    addUserMessage(d.is_international === 'international' ? 'International Student' : 'Domestic / Home Student', '2.1');
-  }
-  if (d.user_type === 'student' && d.accommodation) {
-    renderStep2_2_Accommodation();
-    addUserMessage(`Living in: ${d.accommodation}`, '2.2');
-  }
-  if (d.user_type === 'student' && d.stay_duration) {
-    renderStep2_3_StayDuration();
-    addUserMessage(`Planned stay: ${d.stay_duration}`, '2.3');
-  }
-  if (d.action_type) {
-    renderStep3_ActionType();
-    addUserMessage(`Action: ${d.action_type}`, '3');
+    addBotMessage({ text: introText, options: null });
+    renderStepRow('1');
+    if (d.user_type === 'student') {
+      renderStepRow('2.1');
+      renderStepRow('2.2');
+      renderStepRow('2.3');
+    }
+    renderStepRow('3');
   }
 
   renderNextQuestion();
@@ -1448,10 +1509,134 @@ function renderNextQuestion() {
   if (d.user_type === 'student' && !d.accommodation) return renderStep2_2_Accommodation();
   if (d.user_type === 'student' && !d.stay_duration) return renderStep2_3_StayDuration();
   if (!d.action_type) return renderStep3_ActionType();
+  // Everything is answered: make sure no answered history row was dropped by
+  // a rebuild (e.g. the step-3 row when switching back to student re-asks the
+  // 2.x steps) before the item card renders.
+  backfillMissingHistory();
   return renderStep4_InteractiveItemCardInChat();
 }
 
 const KIOSK_STEP_ORDER = ['1', '2.1', '2.2', '2.3', '3', '4'];
+
+/** Store the exact bubble text of a committed answer so the history rebuild
+ *  and the resume replay can re-render identical rows. */
+function rememberAnswerLabel(stepKey, text) {
+  State.sessionData.answer_labels = State.sessionData.answer_labels || {};
+  State.sessionData.answer_labels[stepKey] = text;
+}
+
+/**
+ * Render one saved answer as its question row + user bubble. Used by the
+ * resume replay and by the in-place answer-change rebuild. Guards on the
+ * saved state so a step whose answer was invalidated renders nothing.
+ */
+function renderStepRow(stepKey) {
+  const d = State.sessionData;
+  const labels = d.answer_labels || {};
+  switch (stepKey) {
+    case '1':
+      if (!d.user_type) return;
+      renderStep1_StudentVsNonStudent();
+      addUserMessage(labels['1'] || `I am a ${d.user_type === 'student' ? 'Student' : 'Non-Student'}`, '1');
+      break;
+    case '2.1':
+      if (d.user_type !== 'student' || !d.is_international) return;
+      renderStep2_1_International();
+      addUserMessage(labels['2.1'] || (d.is_international === 'international' ? 'International Student' : 'Domestic / Home Student'), '2.1');
+      break;
+    case '2.2':
+      if (d.user_type !== 'student' || !d.accommodation) return;
+      renderStep2_2_Accommodation();
+      addUserMessage(labels['2.2'] || `Living in: ${d.accommodation}`, '2.2');
+      break;
+    case '2.3':
+      if (d.user_type !== 'student' || !d.stay_duration) return;
+      renderStep2_3_StayDuration();
+      addUserMessage(labels['2.3'] || `Planned stay: ${d.stay_duration}`, '2.3');
+      break;
+    case '3':
+      if (!d.action_type) return;
+      renderStep3_ActionType();
+      addUserMessage(labels['3'] || `Action: ${d.action_type}`, '3');
+      break;
+  }
+}
+
+/**
+ * After an in-place answer change: drop everything that follows the updated
+ * bubble (stale downstream questions, answers, thank-you replies, old item
+ * card) and re-render every still-answered downstream step from saved state.
+ * The live next question is rendered by proceedAfterChoice → renderNextQuestion,
+ * so the history stays chronological with no orphaned rows.
+ */
+/** Is this step's answer currently valid in the session state? */
+function stepAnswered(s) {
+  const d = State.sessionData;
+  switch (String(s)) {
+    case '1': return !!d.user_type;
+    case '2.1': return d.user_type === 'student' && !!d.is_international;
+    case '2.2': return d.user_type === 'student' && !!d.accommodation;
+    case '2.3': return d.user_type === 'student' && !!d.stay_duration;
+    case '3': return !!d.action_type;
+  }
+  return true;
+}
+
+/** The steps that apply to the current user type, in flow order, after `stepKey`. */
+function flowStepsAfter(stepKey) {
+  const d = State.sessionData;
+  const start = KIOSK_STEP_ORDER.indexOf(String(stepKey));
+  return KIOSK_STEP_ORDER.slice(start + 1).filter(s =>
+    s !== '4' && (s === '3' || (s.startsWith('2') && d.user_type === 'student'))
+  );
+}
+
+/**
+ * Re-render answered history rows that a rebuild dropped. Called right before
+ * the item card renders (everything answered). Each row is appended at the
+ * end of the thread, so backfilling in step order keeps them in sequence.
+ */
+function backfillMissingHistory() {
+  const thread = document.getElementById('chatThread');
+  if (!thread) return;
+  const have = new Set(
+    [...thread.querySelectorAll('.chat-row.user [data-change-step]')]
+      .map(b => b.getAttribute('data-change-step'))
+  );
+  for (const s of KIOSK_STEP_ORDER) {
+    if (s === '4' || have.has(s) || !stepAnswered(s)) continue;
+    renderStepRow(s);
+  }
+}
+
+function rebuildDownstream(stepKey) {
+  const thread = document.getElementById('chatThread');
+  if (!thread) return;
+  const anchor = inPlaceCommit;
+  if (!anchor || !thread.contains(anchor)) return;
+
+  let n = anchor.nextSibling;
+  while (n) {
+    const nx = n.nextSibling;
+    n.remove();
+    n = nx;
+  }
+
+  // Re-render answered steps in flow order, but stop at the first step that is
+  // still pending: the live flow will ask it, and answered steps AFTER it must
+  // not be rendered above the pending question (backfillMissingHistory puts
+  // them back in order once the flow reaches the end).
+  const steps = flowStepsAfter(stepKey);
+  for (let i = 0; i < steps.length; i++) {
+    if (!stepAnswered(steps[i])) break;
+    if (!stepAnswered(steps[i + 1])) break;
+    renderStepRow(steps[i]);
+  }
+
+  // Re-arm every parked history card (incl. the freshly re-rendered ones and
+  // the changed step's own question cards).
+  rearmPastOptionCards();
+}
 
 window.changeStepAnswer = function (stepKey) {
   stepKey = String(stepKey);

@@ -634,6 +634,51 @@ async function loadAnalytics() {
     document.getElementById('intlCount').textContent = demo.international;
     document.getElementById('domCount').textContent = demo.domestic;
 
+    // By-action split: drop-off / pick-up / return kept in separate buckets,
+    // plus the net flow and the return-rate stats.
+    const byActionBox = document.getElementById('analyticsByAction');
+    const byAction = data.byAction;
+    if (byActionBox && byAction && byAction['drop-off']) {
+      const actCards = [
+        { key: 'drop-off', icon: 'ph-tray-arrow-down', label: 'Drop-off', hint: 'items in', cls: 'green' },
+        { key: 'pick-up', icon: 'ph-tray-arrow-up', label: 'Pick-up', hint: 'items out', cls: 'blue' },
+        { key: 'return', icon: 'ph-arrows-clockwise', label: 'Return', hint: 'borrowed items back', cls: 'amber' }
+      ];
+      const cardsHtml = actCards.map(a => {
+        const v = byAction[a.key];
+        return `
+          <div class="action-stat-card ${a.cls}">
+            <div class="action-stat-head"><i class="ph ${a.icon}"></i> ${a.label} <span class="form-hint">(${a.hint})</span></div>
+            <div class="action-stat-val">${v.swaps} swap${v.swaps === 1 ? '' : 's'}</div>
+            <div class="action-stat-sub">${v.items} items • ${v.weightKg} kg • €${v.valueEur}</div>
+          </div>
+        `;
+      }).join('');
+      const net = data.netByAction || { items: 0, weightKg: 0, valueEur: 0, swaps: 0 };
+      const sgn = n => (n > 0 ? '+' : '') + n;
+      const perPickup = (data.returnPerPickupPct === null || data.returnPerPickupPct === undefined) ? '—' : data.returnPerPickupPct + '%';
+      byActionBox.innerHTML = `
+        <div class="action-cards-row">
+          ${cardsHtml}
+          <div class="action-stat-card net">
+            <div class="action-stat-head"><i class="ph ph-scale"></i> Net flow <span class="form-hint">(in − out)</span></div>
+            <div class="action-stat-val">${sgn(net.items)} items</div>
+            <div class="action-stat-sub">${sgn(net.weightKg)} kg • €${sgn(net.valueEur)} • ${sgn(net.swaps)} net swaps</div>
+          </div>
+        </div>
+        <div class="action-pct-row">
+          <div class="action-pct-chip">
+            <i class="ph ph-arrows-clockwise"></i> Returns share of incoming: <strong>${data.returnSharePct || 0}%</strong>
+            <span class="form-hint">returns ÷ (returns + drop-offs)</span>
+          </div>
+          <div class="action-pct-chip">
+            <i class="ph ph-user-check"></i> Returns per pick-up: <strong>${perPickup}</strong>
+            <span class="form-hint">how many who collected once brought items back</span>
+          </div>
+        </div>
+      `;
+    }
+
     // Accommodations
     const accomBox = document.getElementById('accomListBody');
     const accoms = data.accommodations || {};
@@ -798,15 +843,114 @@ window.deleteTransaction = async (id) => {
 function renderEditTxItems(items) {
   const listEl = document.getElementById('editTxItemsList');
   if (!listEl) return;
-  listEl.innerHTML = (items || []).map(it => `
-    <div class="edit-tx-item-row">
-      <input type="text" class="edit-tx-item-title" value="${escapeHtml(it.title || '')}" placeholder="Item name" />
-      <input type="number" class="edit-tx-item-amount" value="${it.amount || 1}" min="1" style="width: 70px;" />
-      <button type="button" class="btn-secondary-sm edit-tx-item-del" title="Remove item"><i class="ph ph-trash"></i></button>
-    </div>
-  `).join('') || '<div class="form-hint">No items in this entry.</div>';
+  listEl.innerHTML = (items || []).map(it => buildEditTxItemRow(it)).join('') || '<div class="form-hint">No items in this entry.</div>';
   listEl.querySelectorAll('.edit-tx-item-del').forEach(btn => {
     btn.onclick = () => btn.closest('.edit-tx-item-row').remove();
+  });
+  listEl.querySelectorAll('.edit-tx-item-title').forEach(input => wireEditItemAutocomplete(input));
+}
+
+function buildEditTxItemRow(it) {
+  it = it || {};
+  const linked = !!it.id;
+  return `
+    <div class="edit-tx-item-row${linked ? ' linked' : ''}" data-item-id="${linked ? escapeHtml(it.id) : ''}" data-item-category="${linked && it.category ? escapeHtml(it.category) : ''}">
+      <input type="text" class="edit-tx-item-title" value="${escapeHtml(it.title || '')}" placeholder="Search pool items…" />
+      <input type="number" class="edit-tx-item-amount" value="${it.amount || 1}" min="1" style="width: 70px;" />
+      <span class="pool-link-badge" title="Linked to a pool item"><i class="ph ph-link"></i> Pool</span>
+      <button type="button" class="btn-secondary-sm edit-tx-item-del" title="Remove item"><i class="ph ph-trash"></i></button>
+      <div class="edit-item-suggest"></div>
+    </div>
+  `;
+}
+
+/** Drop the pool link from an item row (re-typing breaks the link). */
+function clearEditItemLink(row) {
+  if (!row) return;
+  row.classList.remove('linked');
+  row.dataset.itemId = '';
+  row.dataset.itemCategory = '';
+}
+
+/**
+ * Kiosk-style smart item suggestions for the log editor: typing searches the
+ * pool by title AND synonyms (same fuzzy rule as the kiosk search), shows a
+ * synonym badge + live stock count, and keeps typed-only words possible via
+ * the "Add as new item" row.
+ */
+function wireEditItemAutocomplete(input) {
+  const row = input.closest('.edit-tx-item-row');
+  const box = row ? row.querySelector('.edit-item-suggest') : null;
+  if (!row || !box) return;
+
+  const close = () => box.classList.remove('open');
+
+  const refresh = () => {
+    const term = input.value.trim().toLowerCase();
+    if (!term) { close(); clearEditItemLink(row); return; }
+
+    const inv = AdminState.inventory || [];
+    const results = [];
+    inv.forEach(it => {
+      const t = (it.title || '').toLowerCase();
+      const syns = (it.synonyms || []).map(s => String(s).toLowerCase());
+      let score = null;
+      let via = null;
+      if (t === term) {
+        score = 0;
+      } else {
+        const si = syns.indexOf(term);
+        if (si !== -1) { score = 1; via = it.synonyms[si]; }
+      }
+      if (score === null) {
+        const si2 = syns.findIndex(s => s.includes(term) || term.includes(s));
+        if (t.includes(term) || si2 !== -1) { score = 2; if (si2 !== -1) via = it.synonyms[si2]; }
+      }
+      if (score !== null) results.push({ it, score, via });
+    });
+    results.sort((a, b) => a.score - b.score || String(a.it.title).localeCompare(String(b.it.title)));
+
+    if (results.length === 0) { close(); clearEditItemLink(row); return; }
+
+    const top = results.slice(0, 6);
+    box.innerHTML = top.map(r => `
+      <button type="button" class="edit-item-suggest-row" data-sugg-id="${escapeHtml(r.it.id || '')}">
+        <i class="ph ${(r.it.icon || 'package').replace(/^ph-/, '')}"></i>
+        <span class="sugg-title">${escapeHtml(r.it.title || '')}</span>
+        ${r.via ? `<span class="syn-badge">syn: "${escapeHtml(r.via)}"</span>` : ''}
+        <span class="stock-pill">${r.it.quantity || 0} in stock</span>
+      </button>
+    `).join('') + `
+      <button type="button" class="edit-item-suggest-row edit-item-suggest-new">
+        <i class="ph ph-plus-circle"></i>
+        <span>Add "${escapeHtml(input.value.trim())}" as new item (no stock link)</span>
+      </button>
+    `;
+    box.classList.add('open');
+
+    box.querySelectorAll('[data-sugg-id]').forEach(b => {
+      b.onclick = () => {
+        const it = (AdminState.inventory || []).find(x => x.id === b.dataset.suggId);
+        if (!it) return;
+        input.value = it.title;
+        row.dataset.itemId = it.id;
+        row.dataset.itemCategory = it.category || '';
+        row.classList.add('linked');
+        close();
+      };
+    });
+    const newRow = box.querySelector('.edit-item-suggest-new');
+    if (newRow) newRow.onclick = () => { clearEditItemLink(row); close(); };
+  };
+
+  input.addEventListener('input', () => {
+    // Free-typing breaks any previous pool link — re-link via a suggestion.
+    clearEditItemLink(row);
+    refresh();
+  });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  document.addEventListener('click', e => {
+    if (!box.contains(e.target) && e.target !== input) close();
   });
 }
 
@@ -842,24 +986,41 @@ document.getElementById('btnAddEditTxItem').addEventListener('click', () => {
   const listEl = document.getElementById('editTxItemsList');
   const hint = listEl.querySelector('.form-hint');
   if (hint) hint.remove();
-  const row = document.createElement('div');
-  row.className = 'edit-tx-item-row';
-  row.innerHTML = `
-    <input type="text" class="edit-tx-item-title" value="" placeholder="Item name" />
-    <input type="number" class="edit-tx-item-amount" value="1" min="1" style="width: 70px;" />
-    <button type="button" class="btn-secondary-sm edit-tx-item-del" title="Remove item"><i class="ph ph-trash"></i></button>
-  `;
-  row.querySelector('.edit-tx-item-del').onclick = () => row.remove();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = buildEditTxItemRow({});
+  const row = wrap.firstElementChild;
   listEl.appendChild(row);
+  row.querySelector('.edit-tx-item-del').onclick = () => row.remove();
+  wireEditItemAutocomplete(row.querySelector('.edit-tx-item-title'));
+  row.querySelector('.edit-tx-item-title').focus();
 });
 
 document.getElementById('formEditTx').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('editTxId').value;
-  const items = [...document.querySelectorAll('#editTxItemsList .edit-tx-item-row')].map(r => ({
-    title: r.querySelector('.edit-tx-item-title').value.trim(),
-    amount: parseInt(r.querySelector('.edit-tx-item-amount').value, 10) || 1
-  })).filter(it => it.title);
+  const inv = AdminState.inventory || [];
+  // Resolve free-typed titles against the pool (exact title/synonym match) so
+  // saving an edit never silently unlinks a pool item from the log entry.
+  const resolvePoolItem = (title) => {
+    const t = String(title || '').trim().toLowerCase();
+    if (!t) return null;
+    return inv.find(i => (i.title || '').toLowerCase() === t)
+        || inv.find(i => (i.synonyms || []).some(s => String(s).toLowerCase() === t))
+        || null;
+  };
+  const items = [...document.querySelectorAll('#editTxItemsList .edit-tx-item-row')].map(r => {
+    const title = r.querySelector('.edit-tx-item-title').value.trim();
+    const amount = parseInt(r.querySelector('.edit-tx-item-amount').value, 10) || 1;
+    const linkedId = r.dataset.itemId || null;
+    const linked = linkedId ? inv.find(i => i.id === linkedId) : null;
+    const resolved = linked || resolvePoolItem(title);
+    return {
+      title,
+      amount,
+      id: resolved ? resolved.id : null,
+      category: resolved ? (resolved.category || 'Miscellaneous') : 'Miscellaneous'
+    };
+  }).filter(it => it.title);
   const payload = {
     user_type: document.getElementById('editTxUserType').value,
     is_international: document.getElementById('editTxInternational').value,
