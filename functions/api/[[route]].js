@@ -944,6 +944,79 @@ export async function onRequest(context) {
     globalThis._memKV[key] = data;
   }
 
+  // ---- Admin authentication: session tokens + login rate limiting ----
+  const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000; // tokens live 12 hours
+  const RATE_LIMIT_MAX = 5;                          // login attempts per window
+  const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;       // 15 minute window
+
+  function clientIP(req) {
+    const forwarded = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for");
+    return (forwarded ? String(forwarded).split(",")[0].trim() : "") || "unknown";
+  }
+
+  function validAdminPassword(password, settings) {
+    if (!password) return false;
+    return password === (settings && settings.adminPassword) || password === "swapadmin" || password === "ecoswap2026";
+  }
+
+  // Sliding-window login rate limit per client IP (stored in KV, shared across replicas)
+  async function checkLoginRateLimit(ip) {
+    const now = Date.now();
+    const all = (await getKV("admin_login_rl", {})) || {};
+    const rec = all[ip] || { count: 0, first: now };
+    if (now - (rec.first || now) > RATE_LIMIT_WINDOW_MS) { rec.count = 0; rec.first = now; }
+    if (rec.count >= RATE_LIMIT_MAX) {
+      all[ip] = rec;
+      await putKV("admin_login_rl", all);
+      return { allowed: false, remaining: 0, resetInSec: Math.max(1, Math.ceil((rec.first + RATE_LIMIT_WINDOW_MS - now) / 1000)) };
+    }
+    rec.count += 1;
+    for (const k of Object.keys(all)) {
+      if (k !== ip && now - (all[k].first || 0) > RATE_LIMIT_WINDOW_MS) delete all[k];
+    }
+    all[ip] = rec;
+    await putKV("admin_login_rl", all);
+    return { allowed: true, remaining: RATE_LIMIT_MAX - rec.count, resetInSec: 0 };
+  }
+
+  async function issueAdminToken(ip) {
+    let token;
+    try { token = crypto.randomUUID() + crypto.randomUUID(); } catch (e) { token = Math.random().toString(36).slice(2) + Date.now().toString(36); }
+    const now = Date.now();
+    const sessions = (await getKV("admin_sessions", {})) || {};
+    for (const k of Object.keys(sessions)) {
+      if (!sessions[k] || now - (sessions[k].issuedAt || 0) > ADMIN_SESSION_TTL_MS) delete sessions[k];
+    }
+    sessions[token] = { ip, issuedAt: now, exp: now + ADMIN_SESSION_TTL_MS };
+    await putKV("admin_sessions", sessions);
+    return { token, expiresAt: now + ADMIN_SESSION_TTL_MS };
+  }
+
+  // Mutation routes: accept a live Bearer session token or the legacy
+  // x-admin-password header (CLI / direct integration fallback).
+  async function verifyAdminRequest(req, settings) {
+    try {
+      const auth = req.headers.get("authorization") || "";
+      if (auth.startsWith("Bearer ")) {
+        const token = auth.slice(7).trim();
+        const sessions = (await getKV("admin_sessions", {})) || {};
+        const rec = sessions[token];
+        if (rec && Date.now() < (rec.exp || 0)) return true;
+      }
+      const legacy = req.headers.get("x-admin-password");
+      if (legacy && validAdminPassword(legacy, settings)) return true;
+    } catch (e) {
+      console.warn("Admin auth check error:", e);
+    }
+    return false;
+  }
+
+  async function requireAdmin(req) {
+    const settings = (await getKV("settings", {})) || {};
+    if (await verifyAdminRequest(req, settings)) return null;
+    return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+  }
+
   // 0. KV health check (diagnostic endpoint)
   // GET /api/kv-status -> reports whether the KV binding is active in THIS
   // deployment and performs a live write/read/delete probe.
@@ -978,12 +1051,18 @@ export async function onRequest(context) {
 
   // 1. Admin Login
   if (path === "admin/login" && method === "POST") {
-    const body = await request.json().catch(() => ({}));
     const settings = await getKV("settings", DEFAULT_SETTINGS, true);
-    if (body.password === settings.adminPassword || body.password === "swapadmin" || body.password === "ecoswap2026") {
-      return new Response(JSON.stringify({ success: true, message: "Admin authenticated successfully" }), { headers: corsHeaders });
+    const ip = clientIP(request);
+    const rl = await checkLoginRateLimit(ip);
+    if (!rl.allowed) {
+      return new Response(JSON.stringify({ success: false, rateLimited: true, error: "Too many login attempts. Please wait a few minutes before trying again." }), { status: 429, headers: corsHeaders });
     }
-    return new Response(JSON.stringify({ success: false, error: "Invalid admin password" }), { status: 401, headers: corsHeaders });
+    const body = await request.json().catch(() => ({}));
+    if (validAdminPassword(body.password, settings)) {
+      const { token, expiresAt } = await issueAdminToken(ip);
+      return new Response(JSON.stringify({ success: true, message: "Admin authenticated successfully", token, expiresAt }), { headers: corsHeaders });
+    }
+    return new Response(JSON.stringify({ success: false, error: "Invalid admin password", remainingAttempts: rl.remaining }), { status: 401, headers: corsHeaders });
   }
 
   // 2. Categories API
@@ -993,6 +1072,8 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ success: true, count: categories.length, categories }), { headers: corsHeaders });
     }
     if (method === "POST") {
+      const denied = await requireAdmin(request);
+      if (denied) return denied;
       const body = await request.json().catch(() => ({}));
       if (!body.name || !body.name.trim()) {
         return new Response(JSON.stringify({ success: false, error: "Category name is required" }), { status: 400, headers: corsHeaders });
@@ -1010,11 +1091,38 @@ export async function onRequest(context) {
   }
 
   if (path.startsWith("categories/") && method === "DELETE") {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
     const catId = path.replace("categories/", "");
     let categories = await getKV("categories", DEFAULT_CATEGORIES, true);
     categories = categories.filter(c => c.id !== catId && c.name !== catId);
     await putKV("categories", categories);
     return new Response(JSON.stringify({ success: true, message: "Category deleted" }), { headers: corsHeaders });
+  }
+
+  if (path.startsWith("categories/") && method === "PUT") {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
+    const catId = path.replace("categories/", "");
+    const body = await request.json().catch(() => ({}));
+    let categories = await getKV("categories", DEFAULT_CATEGORIES, true);
+    const cat = categories.find(c => c.id === catId);
+    if (!cat) {
+      return new Response(JSON.stringify({ success: false, error: "Category not found" }), { status: 404, headers: corsHeaders });
+    }
+    const prevName = cat.name;
+    if (typeof body.name === "string" && body.name.trim()) cat.name = body.name.trim();
+    if (typeof body.icon === "string" && body.icon.trim()) cat.icon = body.icon.trim();
+    if (typeof body.description === "string") cat.description = body.description.trim();
+    await putKV("categories", categories);
+    // Inventory items store their category by name -> cascade a rename.
+    let renamedItems = 0;
+    if (cat.name !== prevName) {
+      const inventory = await getKV("inventory", DEFAULT_INVENTORY, true);
+      inventory.forEach(item => { if (item.category === prevName) { item.category = cat.name; renamedItems++; } });
+      if (renamedItems > 0) await putKV("inventory", inventory);
+    }
+    return new Response(JSON.stringify({ success: true, category: cat, renamedItems }), { headers: corsHeaders });
   }
 
   // 3. Inventory API
@@ -1041,6 +1149,8 @@ export async function onRequest(context) {
     }
 
     if (method === "POST") {
+      const denied = await requireAdmin(request);
+      if (denied) return denied;
       const body = await request.json().catch(() => ({}));
       if (!body.title) {
         return new Response(JSON.stringify({ success: false, error: "Title is required" }), { status: 400, headers: corsHeaders });
@@ -1073,6 +1183,8 @@ export async function onRequest(context) {
     const idx = items.findIndex(it => it.id === itemId);
 
     if (method === "PUT") {
+      const denied = await requireAdmin(request);
+      if (denied) return denied;
       if (idx === -1) {
         return new Response(JSON.stringify({ success: false, error: "Item not found" }), { status: 404, headers: corsHeaders });
       }
@@ -1094,6 +1206,8 @@ export async function onRequest(context) {
     }
 
     if (method === "DELETE") {
+      const denied = await requireAdmin(request);
+      if (denied) return denied;
       if (idx === -1) {
         return new Response(JSON.stringify({ success: false, error: "Item not found" }), { status: 404, headers: corsHeaders });
       }
@@ -1105,6 +1219,8 @@ export async function onRequest(context) {
 
   // 4. Admin Synonym Mapping & Pool Update
   if (path === "admin/map-synonym" && method === "POST") {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
     const body = await request.json().catch(() => ({}));
     const { synonym, targetItemId, adjustQuantity } = body;
     if (!synonym || !targetItemId) {
@@ -1200,6 +1316,7 @@ export async function onRequest(context) {
     let totalWeight = 0, totalValue = 0, totalCo2 = 0;
 
     const matchedIds = [];
+    const matchedCategories = [];
     items.forEach(it => {
       const qty = parseInt(it.amount, 10) || 1;
       const itemWord = (it.title || "").toLowerCase();
@@ -1211,6 +1328,7 @@ export async function onRequest(context) {
           invItem.quantity = Math.max(0, (invItem.quantity || 0) - qty);
         }
         matchedIds.push(invItem.id);
+        matchedCategories.push(invItem.category || null);
         invItem.lastUpdated = now;
         totalWeight += (invItem.weight_kg || 0.5) * qty;
         totalValue += (invItem.est_value_eur || 10.0) * qty;
@@ -1222,6 +1340,7 @@ export async function onRequest(context) {
         totalValue += 8.0 * qty;
         totalCo2 += 1.8 * qty;
         matchedIds.push(null);
+        matchedCategories.push(null);
       }
     });
 
@@ -1240,7 +1359,7 @@ export async function onRequest(context) {
         id: it.id || matchedIds[i] || null,
         title: it.title || "Item",
         amount: parseInt(it.amount, 10) || 1,
-        category: it.category || "Miscellaneous"
+        category: matchedCategories[i] || it.category || "Miscellaneous"
       })),
       weight_diverted_kg: parseFloat(totalWeight.toFixed(2)),
       value_saved_eur: parseFloat(totalValue.toFixed(2)),
@@ -1301,6 +1420,41 @@ export async function onRequest(context) {
     const totalStockItems = inventory.reduce((acc, it) => acc + (it.quantity || 0), 0);
     const activeSessionsCount = Object.values(sessions).filter(s => s.status === "in_progress").length;
 
+    // Item-level rollups for the richer dashboard
+    const topItemMap = {};
+    const categoryMap = {};
+    transactions.forEach(tx => {
+      (tx.items || []).forEach(it => {
+        const t = (it.title || "Unknown").trim();
+        topItemMap[t] = (topItemMap[t] || 0) + (it.amount || 1);
+        const c = it.category || "Uncategorized";
+        categoryMap[c] = (categoryMap[c] || 0) + (it.amount || 1);
+      });
+    });
+    const topItems = Object.entries(topItemMap)
+      .sort((a, b) => b[1] - a[1]).slice(0, 5)
+      .map(([title, count]) => ({ title, count }));
+    const categoryMix = Object.entries(categoryMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, count]) => ({ category, count }));
+    const nowD = new Date();
+    const monthlyTrend = [];
+    for (let m = 5; m >= 0; m--) {
+      const start = new Date(nowD.getFullYear(), nowD.getMonth() - m, 1);
+      const end = new Date(nowD.getFullYear(), nowD.getMonth() - m + 1, 1);
+      const inMonth = transactions.filter(tx => {
+        const t = new Date(tx.timestamp);
+        return !isNaN(t) && t >= start && t < end;
+      });
+      monthlyTrend.push({
+        label: start.toLocaleDateString("en-GB", { month: "short" }),
+        swaps: inMonth.length,
+        items: inMonth.reduce((s, tx) => s + (tx.items || []).reduce((x, it) => x + (it.amount || 1), 0), 0)
+      });
+    }
+    const stockValueEur = inventory.reduce((s, it) => s + (parseFloat(it.est_value_eur) || 0) * (parseInt(it.quantity, 10) || 0), 0);
+    const avgValuePerItem = totalItemsSwapped > 0 ? totalValueEur / totalItemsSwapped : 0;
+
     return new Response(JSON.stringify({
       success: true,
       totalSwaps,
@@ -1313,7 +1467,12 @@ export async function onRequest(context) {
       actions,
       demographics,
       accommodations,
-      stayDurations
+      stayDurations,
+      topItems,
+      categoryMix,
+      monthlyTrend,
+      stockValueEur: parseFloat(stockValueEur.toFixed(2)),
+      avgValuePerItem: parseFloat(avgValuePerItem.toFixed(2))
     }), { headers: corsHeaders });
   }
 
@@ -1324,6 +1483,8 @@ export async function onRequest(context) {
   }
 
   if (path.startsWith("transactions/") && method === "PUT") {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
     const txId = path.replace("transactions/", "");
     const body = await request.json().catch(() => ({}));
     let transactions = await getKV("transactions", []);
@@ -1374,6 +1535,8 @@ export async function onRequest(context) {
   }
 
   if (path === "settings" && method === "PUT") {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
     const body = await request.json().catch(() => ({}));
     const s = await getKV("settings", DEFAULT_SETTINGS, true);
     if (body.shopName !== undefined) s.shopName = String(body.shopName).trim() || s.shopName;
@@ -1395,6 +1558,8 @@ export async function onRequest(context) {
   }
 
   if (path.startsWith("transactions/") && method === "DELETE") {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
     const txId = path.replace("transactions/", "");
     let transactions = await getKV("transactions", []);
     const idx = transactions.findIndex(t => t.id === txId);

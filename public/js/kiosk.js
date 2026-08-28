@@ -222,15 +222,23 @@ async function handleStep1Choice(value, label) {
   showTyping();
   setTimeout(() => {
     hideTyping();
-    if (value === 'student') {
-      renderStep2_1_International();
-    } else {
+    if (value === 'non-student') {
+      const d = State.sessionData;
+      // Student-only answers no longer apply — clear them and remove their
+      // chat rows when the user just changed their step-1 answer.
+      const stepFields = { '2.1': 'is_international', '2.2': 'accommodation', '2.3': 'stay_duration' };
+      Object.keys(stepFields).forEach(s => {
+        if (d[stepFields[s]]) {
+          d[stepFields[s]] = null;
+          removeStepHistoryRow(s);
+        }
+      });
       addBotMessage({
         text: "Thank you for supporting community reuse! As a community member, let's jump straight to your swap items.",
         options: null
       });
-      setTimeout(() => renderStep3_ActionType(), 350);
     }
+    setTimeout(() => renderNextQuestion(), 350);
   }, 350);
 }
 
@@ -266,7 +274,7 @@ async function handleStep2_1Choice(value, label) {
   showTyping();
   setTimeout(() => {
     hideTyping();
-    renderStep2_2_Accommodation();
+    renderNextQuestion();
   }, 350);
 }
 
@@ -336,7 +344,7 @@ async function handleStep2_2Choice(choiceText) {
   showTyping();
   setTimeout(() => {
     hideTyping();
-    renderStep2_3_StayDuration();
+    renderNextQuestion();
   }, 350);
 }
 
@@ -365,7 +373,7 @@ async function handleStep2_3Choice(durationLabel) {
   showTyping();
   setTimeout(() => {
     hideTyping();
-    renderStep3_ActionType();
+    renderNextQuestion();
   }, 350);
 }
 
@@ -428,7 +436,7 @@ async function handleStep3Choice(actionType, actionLabel) {
     }
 
     setTimeout(() => {
-      renderStep4_InteractiveItemCardInChat();
+      renderNextQuestion();
     }, 400);
   }, 350);
 }
@@ -441,6 +449,10 @@ function renderStep4_InteractiveItemCardInChat() {
   const actionWord = action === 'drop-off' ? 'drop off' : (action === 'pick-up' ? 'pick up' : 'return');
 
   const thread = document.getElementById('chatThread');
+  // The flow can return to step 4 after an earlier answer change — replace
+  // any previous card so the chat keeps one live card and unique IDs.
+  const oldCard = thread.querySelector('#step4ChatRow');
+  if (oldCard) oldCard.remove();
   const cardRow = document.createElement('div');
   cardRow.className = 'chat-row bot';
   cardRow.id = 'step4ChatRow';
@@ -529,6 +541,7 @@ function renderStep4_InteractiveItemCardInChat() {
 
   // Attach card event handlers
   initChatCardHandlers(cardRow);
+  renderChatSelectedItems();
 }
 
 function initChatCardHandlers(cardRow) {
@@ -658,38 +671,48 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
     if (isMatch) matches.push({ item, synonymMatched: synMatch });
   });
 
-  if (matches.length === 0) {
-    dropdown.innerHTML = `
-      <div class="sugg-row" id="chatBtnCustom">
-        <div class="sugg-left-box">
-          <i class="ph ph-plus-circle"></i>
-          <div>
-            <div class="sugg-title-txt">Log generic item: <strong>"${escapeHtml(itemName || rawInput)}"</strong></div>
-          </div>
+  const newTitle = itemName || rawInput;
+
+  // The "log as a new item" row is ALWAYS available, even when pool
+  // suggestions exist — a fuzzy match (e.g. "käse" vs "Käsemauken")
+  // must never block adding the typed word as its own item.
+  const customRowHtml = `
+    <div class="sugg-row sugg-row-custom" id="chatBtnCustom">
+      <div class="sugg-left-box">
+        <i class="ph ph-plus-circle"></i>
+        <div>
+          <div class="sugg-title-txt">Add as a new item: <strong>"${escapeHtml(newTitle)}"</strong></div>
         </div>
       </div>
-    `;
-    dropdown.style.display = 'block';
+    </div>
+  `;
 
-    const customBtn = document.getElementById('chatBtnCustom');
-    if (customBtn) {
-      customBtn.onclick = () => {
-        const amt = parseInt(inputQty.value, 10) || 1;
-        addItemToSwap({
-          id: null,
-          title: itemName || rawInput,
-          category: 'Miscellaneous',
-          icon: 'ph-package'
-        }, amt);
-        inputQty.value = '1';
-        dropdown.parentElement.querySelector('input').value = '';
-        dropdown.style.display = 'none';
-      };
-    }
+  const wireCustomRow = () => {
+    const customBtn = dropdown.querySelector('#chatBtnCustom');
+    if (!customBtn) return;
+    customBtn.onclick = () => {
+      const amt = parseInt(inputQty.value, 10) || 1;
+      addItemToSwap({
+        id: null,
+        title: newTitle,
+        category: 'Miscellaneous',
+        icon: 'ph-package'
+      }, amt);
+      inputQty.value = '1';
+      dropdown.parentElement.querySelector('input').value = '';
+      dropdown.style.display = 'none';
+    };
+  };
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = customRowHtml;
+    dropdown.style.display = 'block';
+    wireCustomRow();
     return;
   }
 
-  dropdown.innerHTML = matches.slice(0, 5).map(({ item, synonymMatched }) => {
+  const visibleMatches = matches.slice(0, 4);
+  dropdown.innerHTML = visibleMatches.map(({ item, synonymMatched }) => {
     const synTag = synonymMatched ? `<span class="sugg-syn-badge">Synonym: "${escapeHtml(synonymMatched)}"</span>` : '';
     const stockPill = item.quantity > 0
       ? `<span class="stock-pill in-stock">${item.quantity} in stock</span>`
@@ -707,11 +730,11 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
         <div>${stockPill}</div>
       </div>
     `;
-  }).join('');
+  }).join('') + customRowHtml;
 
   dropdown.style.display = 'block';
 
-  dropdown.querySelectorAll('.sugg-row').forEach(row => {
+  dropdown.querySelectorAll('.sugg-row[data-id]').forEach(row => {
     row.onclick = () => {
       const itemId = row.getAttribute('data-id');
       const item = State.inventory.find(i => i.id === itemId);
@@ -724,6 +747,7 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
       dropdown.style.display = 'none';
     };
   });
+  wireCustomRow();
 }
 
 function findBestInventoryMatch(query) {
@@ -1087,15 +1111,44 @@ function addBotMessage({ text, options = null }) {
   if (options && Array.isArray(options)) {
     options.forEach((opt, idx) => {
       const btn = row.querySelector(`#${opt.id || 'opt-' + idx}`);
-      if (btn && opt.action) btn.onclick = () => opt.action(btn);
+      if (btn && opt.action) {
+        // Keep the original action so the in-place change flow can restore it.
+        btn.__origAction = () => opt.action(btn);
+        btn.onclick = btn.__origAction;
+      }
     });
   }
 
   scrollChatBottom();
 }
 
+// When set (a step key), the next addUserMessage for that step updates the
+// existing bubble in place instead of appending a new one — the in-place
+// answer-change flow (no confirm, later answers kept).
+let pendingAnswerUpdate = null;
+
 function addUserMessage(text, stepNumber = null) {
   const thread = document.getElementById('chatThread');
+
+  if (pendingAnswerUpdate && stepNumber && String(stepNumber) === String(pendingAnswerUpdate)) {
+    const existing = [...thread.querySelectorAll('.chat-row.user')].find(r => {
+      const btn = r.querySelector('[data-change-step]');
+      return btn && btn.getAttribute('data-change-step') === String(stepNumber);
+    });
+    if (existing) {
+      const bubble = existing.querySelector('.bubble-text');
+      if (bubble) bubble.innerHTML = escapeHtml(text) + ' <span class="updated-badge">updated</span>';
+      existing.classList.remove('bubble-updated');
+      void existing.offsetWidth; // restart the flash animation
+      existing.classList.add('bubble-updated');
+      pendingAnswerUpdate = null;
+      rearmPastOptionCards();
+      existing.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    pendingAnswerUpdate = null;
+  }
+
   const row = document.createElement('div');
   row.className = 'chat-row user';
 
@@ -1188,54 +1241,99 @@ function replaySavedChat() {
   const d = State.sessionData;
   if (d.user_type) {
     addBotMessage({ text: "Welcome back! Resuming your saved swap.", options: null });
+    renderStep1_StudentVsNonStudent();
     addUserMessage(`I am a ${d.user_type === 'student' ? 'Student' : 'Non-Student'}`, '1');
   }
-  if (d.is_international) {
+  if (d.user_type === 'student' && d.is_international) {
+    renderStep2_1_International();
     addUserMessage(d.is_international === 'international' ? 'International Student' : 'Domestic / Home Student', '2.1');
   }
-  if (d.accommodation) {
+  if (d.user_type === 'student' && d.accommodation) {
+    renderStep2_2_Accommodation();
     addUserMessage(`Living in: ${d.accommodation}`, '2.2');
   }
-  if (d.stay_duration) {
+  if (d.user_type === 'student' && d.stay_duration) {
+    renderStep2_3_StayDuration();
     addUserMessage(`Planned stay: ${d.stay_duration}`, '2.3');
   }
   if (d.action_type) {
+    renderStep3_ActionType();
     addUserMessage(`Action: ${d.action_type}`, '3');
   }
 
-  if (!d.user_type) {
-    renderStep1_StudentVsNonStudent();
-  } else if (d.user_type === 'student' && !d.is_international) {
-    renderStep2_1_International();
-  } else if (d.user_type === 'student' && !d.accommodation) {
-    renderStep2_2_Accommodation();
-  } else if (d.user_type === 'student' && !d.stay_duration) {
-    renderStep2_3_StayDuration();
-  } else if (!d.action_type) {
-    renderStep3_ActionType();
-  } else {
-    renderStep4_InteractiveItemCardInChat();
-  }
+  renderNextQuestion();
+}
+
+/**
+ * Render the next unanswered question, honouring any answers that were
+ * preserved across an in-place answer change.
+ */
+function renderNextQuestion() {
+  const d = State.sessionData;
+  if (!d.user_type) return renderStep1_StudentVsNonStudent();
+  if (d.user_type === 'student' && !d.is_international) return renderStep2_1_International();
+  if (d.user_type === 'student' && !d.accommodation) return renderStep2_2_Accommodation();
+  if (d.user_type === 'student' && !d.stay_duration) return renderStep2_3_StayDuration();
+  if (!d.action_type) return renderStep3_ActionType();
+  return renderStep4_InteractiveItemCardInChat();
 }
 
 const KIOSK_STEP_ORDER = ['1', '2.1', '2.2', '2.3', '3', '4'];
 
 window.changeStepAnswer = function (stepKey) {
   stepKey = String(stepKey);
-  const idx = KIOSK_STEP_ORDER.indexOf(stepKey);
-  if (idx === -1) return;
-  if (!confirm('Change this answer? Any answers after it will be reset.')) return;
-  const toClear = KIOSK_STEP_ORDER.slice(idx);
-  const d = State.sessionData;
-  if (toClear.includes('1')) d.user_type = null;
-  if (toClear.includes('2.1')) d.is_international = null;
-  if (toClear.includes('2.2')) d.accommodation = null;
-  if (toClear.includes('2.3')) d.stay_duration = null;
-  if (toClear.includes('3')) d.action_type = null;
-  if (toClear.includes('4')) d.items = [];
+  if (!KIOSK_STEP_ORDER.includes(stepKey)) return;
+
+  const thread = document.getElementById('chatThread');
+  if (!thread) return;
+
+  const findUserRow = (key) => [...thread.querySelectorAll('.chat-row.user')].find(r => {
+    const btn = r.querySelector('[data-change-step]');
+    return btn && btn.getAttribute('data-change-step') === key;
+  });
+
+  if (stepKey === '4') {
+    // Items: nothing earlier is affected, so just clear the items and re-ask.
+    State.sessionData.items = [];
+    removeStepHistoryRow('4');
+    State.currentStep = '4';
+    persistKioskSession();
+    renderStep4_InteractiveItemCardInChat();
+    return;
+  }
+
+  // No confirm — jump straight into the change: re-enable the original
+  // question's option cards so the user can tap their new answer.
+  const userRow = findUserRow(stepKey);
+  let qRow = userRow ? userRow.previousElementSibling : null;
+  while (qRow && !(qRow.classList && qRow.classList.contains('bot'))) qRow = qRow.previousElementSibling;
+
+  pendingAnswerUpdate = stepKey;
   State.currentStep = stepKey;
-  clearChat();
-  replaySavedChat();
+
+  if (qRow) {
+    qRow.querySelectorAll('.option-card-btn').forEach(b => {
+      b.disabled = false;
+      b.classList.remove('option-past');
+      b.title = '';
+      if (b.__origAction) b.onclick = b.__origAction;
+    });
+  }
+  // Park the cards of every other question so only this one is live.
+  thread.querySelectorAll('.chat-row.bot').forEach(row => {
+    if (row === qRow) return;
+    row.querySelectorAll('.option-card-btn').forEach(b => { b.disabled = true; });
+  });
+
+  addBotMessage({
+    text: "No problem — just tap the option you'd like instead. Your other answers are kept unless this change affects them.",
+    options: null
+  });
+  persistKioskSession();
+  if (qRow) qRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+function persistKioskSession() {
   try {
     localStorage.setItem('swapshop_kiosk_session', JSON.stringify({
       sessionId: State.sessionId,
@@ -1244,7 +1342,22 @@ window.changeStepAnswer = function (stepKey) {
       savedAt: new Date().toISOString()
     }));
   } catch (err) {}
-};
+}
+
+function removeStepHistoryRow(stepKey) {
+  const thread = document.getElementById('chatThread');
+  if (!thread) return;
+  const userRow = [...thread.querySelectorAll('.chat-row.user')].find(r => {
+    const btn = r.querySelector('[data-change-step]');
+    return btn && btn.getAttribute('data-change-step') === String(stepKey);
+  });
+  if (!userRow) return;
+  const prev = userRow.previousElementSibling;
+  userRow.remove();
+  if (prev && prev.classList && prev.classList.contains('bot') && prev.querySelector('.option-card-btn')) {
+    prev.remove();
+  }
+}
 
 async function loadInventory() {
   try {

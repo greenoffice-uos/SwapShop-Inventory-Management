@@ -88,7 +88,7 @@ function sendJSON(res, data, status = 200) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Password'
   });
   res.end(JSON.stringify(data));
 }
@@ -97,9 +97,82 @@ function sendCors(res) {
   res.writeHead(204, {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Password'
   });
   res.end();
+}
+
+// -------------------------------------------------------------
+// ADMIN AUTH: session tokens + login rate limiting
+// -------------------------------------------------------------
+const ADMIN_SESSIONS_FILE = path.join(DATA_DIR, 'admin_sessions.json');
+const LOGIN_RL_FILE = path.join(DATA_DIR, 'login_rl.json');
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000; // tokens live 12 hours
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function clientIP(req) {
+  const forwarded = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'];
+  return (forwarded ? String(forwarded).split(',')[0].trim() : '') || (req.socket.remoteAddress || 'unknown');
+}
+
+function validAdminPassword(password, settings) {
+  if (!password) return false;
+  return password === settings.adminPassword || password === 'swapadmin' || password === 'ecoswap2026';
+}
+
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const all = readJSON(LOGIN_RL_FILE, {}) || {};
+  const rec = all[ip] || { count: 0, first: now };
+  if (now - (rec.first || now) > RATE_LIMIT_WINDOW_MS) { rec.count = 0; rec.first = now; }
+  if (rec.count >= RATE_LIMIT_MAX) {
+    all[ip] = rec;
+    writeJSON(LOGIN_RL_FILE, all);
+    return { allowed: false, remaining: 0, resetInSec: Math.max(1, Math.ceil((rec.first + RATE_LIMIT_WINDOW_MS - now) / 1000)) };
+  }
+  rec.count += 1;
+  for (const k of Object.keys(all)) {
+    if (k !== ip && now - (all[k].first || 0) > RATE_LIMIT_WINDOW_MS) delete all[k];
+  }
+  all[ip] = rec;
+  writeJSON(LOGIN_RL_FILE, all);
+  return { allowed: true, remaining: RATE_LIMIT_MAX - rec.count, resetInSec: 0 };
+}
+
+function issueAdminToken(ip) {
+  const token = require('crypto').randomBytes(32).toString('hex');
+  const now = Date.now();
+  const sessions = readJSON(ADMIN_SESSIONS_FILE, {}) || {};
+  for (const k of Object.keys(sessions)) {
+    if (!sessions[k] || now - (sessions[k].issuedAt || 0) > ADMIN_SESSION_TTL_MS) delete sessions[k];
+  }
+  sessions[token] = { ip, issuedAt: now, exp: now + ADMIN_SESSION_TTL_MS };
+  writeJSON(ADMIN_SESSIONS_FILE, sessions);
+  return { token, expiresAt: now + ADMIN_SESSION_TTL_MS };
+}
+
+// Mutation routes: accept a live Bearer session token or the legacy
+// x-admin-password header (CLI / direct integration fallback).
+function verifyAdminRequest(req, settings) {
+  const auth = req.headers['authorization'] || '';
+  if (auth.startsWith('Bearer ')) {
+    const token = auth.slice(7).trim();
+    const sessions = readJSON(ADMIN_SESSIONS_FILE, {}) || {};
+    const rec = sessions[token];
+    if (rec && Date.now() < (rec.exp || 0)) return true;
+  }
+  const legacy = req.headers['x-admin-password'];
+  if (legacy && validAdminPassword(legacy, settings)) return true;
+  return false;
+}
+
+// Responds with 401 and returns true when the request is NOT authorized.
+function rejectIfNotAdmin(req, res) {
+  const settings = readJSON(SETTINGS_FILE, { adminPassword: 'swapadmin' });
+  if (verifyAdminRequest(req, settings)) return false;
+  sendJSON(res, { success: false, error: 'Unauthorized' }, 401);
+  return true;
 }
 
 function serveStatic(req, res, pathname) {
@@ -145,12 +218,19 @@ const server = http.createServer(async (req, res) => {
 
   // Admin Login
   if (pathname === '/api/admin/login' && method === 'POST') {
-    const body = await parseBody(req);
     const settings = readJSON(SETTINGS_FILE, { adminPassword: 'swapadmin' });
-    if (body.password === settings.adminPassword || body.password === 'swapadmin' || body.password === 'ecoswap2026') {
-      sendJSON(res, { success: true, message: 'Admin authenticated successfully' });
+    const ip = clientIP(req);
+    const rl = checkLoginRateLimit(ip);
+    if (!rl.allowed) {
+      sendJSON(res, { success: false, rateLimited: true, error: 'Too many login attempts. Please wait a few minutes before trying again.' }, 429);
+      return;
+    }
+    const body = await parseBody(req);
+    if (validAdminPassword(body.password, settings)) {
+      const { token, expiresAt } = issueAdminToken(ip);
+      sendJSON(res, { success: true, message: 'Admin authenticated successfully', token, expiresAt });
     } else {
-      sendJSON(res, { success: false, error: 'Invalid admin password' }, 401);
+      sendJSON(res, { success: false, error: 'Invalid admin password', remainingAttempts: rl.remaining }, 401);
     }
     return;
   }
@@ -163,6 +243,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (method === 'POST') {
+      if (rejectIfNotAdmin(req, res)) return;
       const body = await parseBody(req);
       const categories = readJSON(CATEGORIES_FILE, []);
       if (!body.name || !body.name.trim()) {
@@ -183,11 +264,38 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname.startsWith('/api/categories/') && method === 'DELETE') {
+    if (rejectIfNotAdmin(req, res)) return;
     const catId = pathname.replace('/api/categories/', '');
     let categories = readJSON(CATEGORIES_FILE, []);
     categories = categories.filter(c => c.id !== catId && c.name !== catId);
     writeJSON(CATEGORIES_FILE, categories);
     sendJSON(res, { success: true, message: 'Category deleted' });
+    return;
+  }
+
+  if (pathname.startsWith('/api/categories/') && method === 'PUT') {
+    if (rejectIfNotAdmin(req, res)) return;
+    const catId = pathname.replace('/api/categories/', '');
+    const body = await parseBody(req);
+    let categories = readJSON(CATEGORIES_FILE, []);
+    const cat = categories.find(c => c.id === catId);
+    if (!cat) {
+      sendJSON(res, { success: false, error: 'Category not found' }, 404);
+      return;
+    }
+    const prevName = cat.name;
+    if (typeof body.name === 'string' && body.name.trim()) cat.name = body.name.trim();
+    if (typeof body.icon === 'string' && body.icon.trim()) cat.icon = body.icon.trim();
+    if (typeof body.description === 'string') cat.description = body.description.trim();
+    writeJSON(CATEGORIES_FILE, categories);
+    // Inventory items store their category by name -> cascade a rename.
+    let renamedItems = 0;
+    if (cat.name !== prevName) {
+      const inventory = readJSON(INVENTORY_FILE, []);
+      inventory.forEach(item => { if (item.category === prevName) { item.category = cat.name; renamedItems++; } });
+      if (renamedItems > 0) writeJSON(INVENTORY_FILE, inventory);
+    }
+    sendJSON(res, { success: true, category: cat, renamedItems });
     return;
   }
 
@@ -215,6 +323,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === 'POST') {
+      if (rejectIfNotAdmin(req, res)) return;
       const body = await parseBody(req);
       const items = readJSON(INVENTORY_FILE, []);
       if (!body.title) {
@@ -249,6 +358,7 @@ const server = http.createServer(async (req, res) => {
     const idx = items.findIndex(it => it.id === itemId);
 
     if (method === 'PUT') {
+      if (rejectIfNotAdmin(req, res)) return;
       if (idx === -1) {
         sendJSON(res, { success: false, error: 'Item not found' }, 404);
         return;
@@ -272,6 +382,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === 'DELETE') {
+      if (rejectIfNotAdmin(req, res)) return;
       if (idx === -1) {
         sendJSON(res, { success: false, error: 'Item not found' }, 404);
         return;
@@ -285,6 +396,7 @@ const server = http.createServer(async (req, res) => {
 
   // Admin Synonym Mapping
   if (pathname === '/api/admin/map-synonym' && method === 'POST') {
+    if (rejectIfNotAdmin(req, res)) return;
     const body = await parseBody(req);
     const { synonym, targetItemId, adjustQuantity } = body;
     if (!synonym || !targetItemId) {
@@ -388,6 +500,7 @@ const server = http.createServer(async (req, res) => {
     let totalCo2 = 0;
 
     const matchedIds = [];
+    const matchedCategories = [];
     items.forEach(it => {
       const qty = parseInt(it.amount, 10) || 1;
       const itemWord = (it.title || '').toLowerCase();
@@ -399,6 +512,7 @@ const server = http.createServer(async (req, res) => {
           invItem.quantity = Math.max(0, (invItem.quantity || 0) - qty);
         }
         matchedIds.push(invItem.id);
+        matchedCategories.push(invItem.category || null);
         invItem.lastUpdated = now;
         totalWeight += (invItem.weight_kg || 0.5) * qty;
         totalValue += (invItem.est_value_eur || 10.0) * qty;
@@ -409,6 +523,7 @@ const server = http.createServer(async (req, res) => {
         totalValue += 8.0 * qty;
         totalCo2 += 1.8 * qty;
         matchedIds.push(null);
+        matchedCategories.push(null);
       }
     });
 
@@ -427,7 +542,7 @@ const server = http.createServer(async (req, res) => {
         id: it.id || matchedIds[i] || null,
         title: it.title || 'Item',
         amount: parseInt(it.amount, 10) || 1,
-        category: it.category || 'Miscellaneous'
+        category: matchedCategories[i] || it.category || 'Miscellaneous'
       })),
       weight_diverted_kg: parseFloat(totalWeight.toFixed(2)),
       value_saved_eur: parseFloat(totalValue.toFixed(2)),
@@ -463,6 +578,7 @@ const server = http.createServer(async (req, res) => {
 
   // Edit a transaction (admin activity trail)
   if (pathname.startsWith('/api/transactions/') && method === 'PUT') {
+    if (rejectIfNotAdmin(req, res)) return;
     const txId = pathname.replace('/api/transactions/', '');
     const body = await parseBody(req);
     const transactions = readJSON(TRANSACTIONS_FILE, []);
@@ -499,6 +615,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (pathname === '/api/settings' && method === 'PUT') {
+    if (rejectIfNotAdmin(req, res)) return;
     const body = await parseBody(req);
     const s = readJSON(SETTINGS_FILE, { adminPassword: 'swapadmin' });
     if (body.shopName !== undefined) s.shopName = String(body.shopName).trim() || s.shopName;
@@ -550,6 +667,41 @@ const server = http.createServer(async (req, res) => {
     const totalStockItems = inventory.reduce((acc, it) => acc + (it.quantity || 0), 0);
     const activeSessionsCount = Object.values(sessions).filter(s => s.status === 'in_progress').length;
 
+    // Item-level rollups for the richer dashboard
+    const topItemMap = {};
+    const categoryMap = {};
+    txs.forEach(tx => {
+      (tx.items || []).forEach(it => {
+        const t = (it.title || 'Unknown').trim();
+        topItemMap[t] = (topItemMap[t] || 0) + (it.amount || 1);
+        const c = it.category || 'Uncategorized';
+        categoryMap[c] = (categoryMap[c] || 0) + (it.amount || 1);
+      });
+    });
+    const topItems = Object.entries(topItemMap)
+      .sort((a, b) => b[1] - a[1]).slice(0, 5)
+      .map(([title, count]) => ({ title, count }));
+    const categoryMix = Object.entries(categoryMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, count]) => ({ category, count }));
+    const nowD = new Date();
+    const monthlyTrend = [];
+    for (let m = 5; m >= 0; m--) {
+      const start = new Date(nowD.getFullYear(), nowD.getMonth() - m, 1);
+      const end = new Date(nowD.getFullYear(), nowD.getMonth() - m + 1, 1);
+      const inMonth = txs.filter(tx => {
+        const t = new Date(tx.timestamp);
+        return !isNaN(t) && t >= start && t < end;
+      });
+      monthlyTrend.push({
+        label: start.toLocaleDateString('en-GB', { month: 'short' }),
+        swaps: inMonth.length,
+        items: inMonth.reduce((s, tx) => s + (tx.items || []).reduce((x, it) => x + (it.amount || 1), 0), 0)
+      });
+    }
+    const stockValueEur = inventory.reduce((s, it) => s + (parseFloat(it.est_value_eur) || 0) * (parseInt(it.quantity, 10) || 0), 0);
+    const avgValuePerItem = totalItemsSwapped > 0 ? totalValueEur / totalItemsSwapped : 0;
+
     sendJSON(res, {
       success: true,
       totalSwaps,
@@ -562,7 +714,12 @@ const server = http.createServer(async (req, res) => {
       actions,
       demographics,
       accommodations,
-      stayDurations
+      stayDurations,
+      topItems,
+      categoryMix,
+      monthlyTrend,
+      stockValueEur: parseFloat(stockValueEur.toFixed(2)),
+      avgValuePerItem: parseFloat(avgValuePerItem.toFixed(2))
     });
     return;
   }

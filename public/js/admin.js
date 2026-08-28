@@ -10,6 +10,40 @@ const AdminState = {
   searchQuery: ''
 };
 
+// ==========================================================================
+// AUTH HELPERS
+// ==========================================================================
+function getAdminToken() {
+  return sessionStorage.getItem('swapshop_admin_token') || '';
+}
+
+// All admin API calls go through here: attaches the short-lived session
+// token (never the password) and bounces back to the login screen on 401.
+async function apiFetch(url, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  const token = getAdminToken();
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(url, { ...opts, headers });
+  if (res.status === 401 && !url.includes('/admin/login')) {
+    forceLogout('Your admin session has expired. Please sign in again.');
+  }
+  return res;
+}
+
+function forceLogout(message) {
+  sessionStorage.removeItem('swapshop_admin_authed');
+  sessionStorage.removeItem('swapshop_admin_token');
+  const authScreen = document.getElementById('adminAuthScreen');
+  const adminApp = document.getElementById('adminApp');
+  const errMsg = document.getElementById('authErrorMsg');
+  if (adminApp) adminApp.style.display = 'none';
+  if (authScreen) authScreen.style.display = 'flex';
+  if (errMsg) {
+    errMsg.textContent = message || 'Session expired. Please sign in again.';
+    errMsg.style.display = 'block';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initNavTabs();
@@ -55,6 +89,7 @@ function initAuth() {
 
       if (data.success) {
         sessionStorage.setItem('swapshop_admin_authed', 'true');
+        if (data.token) sessionStorage.setItem('swapshop_admin_token', data.token);
         authScreen.style.display = 'none';
         adminApp.style.display = 'flex';
         loadAllAdminData();
@@ -77,6 +112,7 @@ function initAuth() {
 
   btnLock.onclick = () => {
     sessionStorage.removeItem('swapshop_admin_authed');
+    sessionStorage.removeItem('swapshop_admin_token');
     adminApp.style.display = 'none';
     authScreen.style.display = 'flex';
     passInput.value = '';
@@ -134,12 +170,13 @@ function initInventoryActions() {
 
 async function loadInventory() {
   try {
-    const res = await fetch('/api/inventory');
+    const res = await apiFetch('/api/inventory');
     const data = await res.json();
     if (data.success && data.items) {
       AdminState.inventory = data.items;
       renderInventoryTable();
       renderUnlinkedItems();
+      renderCategoriesTable();
     }
   } catch (e) {}
 }
@@ -228,7 +265,7 @@ function renderInventoryTable() {
 async function updateStock(id, newQty) {
   if (newQty < 0) return;
   try {
-    const res = await fetch(`/api/inventory/${id}`, {
+    const res = await apiFetch(`/api/inventory/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ quantity: newQty })
@@ -240,7 +277,7 @@ async function updateStock(id, newQty) {
 async function deleteItem(id) {
   if (!confirm('Delete this generic item from inventory?')) return;
   try {
-    const res = await fetch(`/api/inventory/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/inventory/${id}`, { method: 'DELETE' });
     if (res.ok) loadInventory();
   } catch (e) {}
 }
@@ -251,7 +288,7 @@ async function deleteItem(id) {
 
 async function persistSynonyms(item, synonyms) {
   try {
-    const res = await fetch(`/api/inventory/${item.id}`, {
+    const res = await apiFetch(`/api/inventory/${item.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ synonyms })
@@ -289,9 +326,16 @@ async function removeTagFromItem(itemId, syn) {
 // CATEGORIES MANAGEMENT
 // ==========================================================================
 function initCategoryManagement() {
-  const form = document.getElementById('formCreateCategory');
-  const catIconInput = document.getElementById('catIconInput');
+  const modal = document.getElementById('categoryModal');
+  const form = document.getElementById('formCatEdit');
+  const nameInput = document.getElementById('catEditName');
+  const catIconInput = document.getElementById('catEditIcon');
   const catIconPreview = document.getElementById('catIconPreview');
+  const descInput = document.getElementById('catEditDesc');
+  const idInput = document.getElementById('catEditId');
+  const titleEl = document.getElementById('categoryModalTitle');
+  const saveLabel = document.getElementById('catSaveLabel');
+  if (!form) return;
 
   function normalizeIconName(v) {
     v = (v || '').trim().toLowerCase().replace(/\s+/g, '-');
@@ -300,6 +344,7 @@ function initCategoryManagement() {
   }
 
   function updateIconPreview() {
+    if (!catIconInput || !catIconPreview) return;
     const n = normalizeIconName(catIconInput.value);
     catIconPreview.className = 'ph cat-icon-preview ' + n;
     const bundled = (window.PH_ICONS || []).includes(n.replace(/^ph-/, ''));
@@ -309,37 +354,71 @@ function initCategoryManagement() {
   if (catIconInput) {
     catIconInput.addEventListener('input', updateIconPreview);
     fillIconDatalist('phIconOptions');
-    updateIconPreview();
   }
+
+  window.openCategoryModal = function (cat) {
+    if (cat) {
+      titleEl.innerHTML = '<i class="ph ph-pencil-simple"></i> Edit Item Category';
+      saveLabel.textContent = 'Save changes';
+      idInput.value = cat.id;
+      nameInput.value = cat.name || '';
+      catIconInput.value = (cat.icon || 'ph-tag').replace(/^ph-/, '');
+      descInput.value = cat.description || '';
+    } else {
+      titleEl.innerHTML = '<i class="ph ph-folder-plus"></i> Add Item Category';
+      saveLabel.textContent = 'Add category';
+      form.reset();
+      idInput.value = '';
+    }
+    updateIconPreview();
+    modal.style.display = 'flex';
+    setTimeout(() => nameInput.focus(), 50);
+  };
+
+  window.editCategory = function (id) {
+    const cat = AdminState.categories.find(c => c.id === id);
+    if (cat) window.openCategoryModal(cat);
+  };
+
+  const closeCatModal = () => { modal.style.display = 'none'; };
+  const btnClose = document.getElementById('btnCloseCatModal');
+  const btnCancel = document.getElementById('btnCatCancel');
+  if (btnClose) btnClose.onclick = closeCatModal;
+  if (btnCancel) btnCancel.onclick = closeCatModal;
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeCatModal(); });
+  const btnOpenCatAdd = document.getElementById('btnOpenCatAdd');
+  if (btnOpenCatAdd) btnOpenCatAdd.onclick = () => window.openCategoryModal(null);
 
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const name = document.getElementById('catNameInput').value.trim();
-    const icon = catIconInput ? normalizeIconName(catIconInput.value) : 'ph-tag';
-    const desc = document.getElementById('catDescInput').value.trim();
-
+    const id = idInput.value;
+    const name = nameInput.value.trim();
+    const icon = normalizeIconName(catIconInput ? catIconInput.value : '');
+    const desc = descInput.value.trim();
     if (!name) return;
 
     try {
-      const res = await fetch('/api/categories', {
-        method: 'POST',
+      const url = id ? '/api/categories/' + encodeURIComponent(id) : '/api/categories';
+      const res = await apiFetch(url, {
+        method: id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, icon, description: desc })
       });
       const data = await res.json();
       if (data.success) {
-        form.reset();
+        modal.style.display = 'none';
         loadCategories();
+        loadInventory();
       } else {
-        alert(data.error || 'Error creating category');
+        alert(data.error || 'Error saving category');
       }
-    } catch (e) {}
+    } catch (err) {}
   };
 }
 
 async function loadCategories() {
   try {
-    const res = await fetch('/api/categories');
+    const res = await apiFetch('/api/categories');
     const data = await res.json();
     if (data.success && data.categories) {
       AdminState.categories = data.categories;
@@ -368,23 +447,34 @@ window.selectFilterCat = (name) => {
 };
 
 function renderCategoriesTable() {
-  const tbody = document.getElementById('categoriesTableBody');
+  const list = document.getElementById('catList');
   const countBadge = document.getElementById('catTotalBadge');
-  if (!tbody) return;
+  if (!list) return;
 
-  countBadge.textContent = AdminState.categories.length;
+  if (countBadge) countBadge.textContent = AdminState.categories.length;
 
-  tbody.innerHTML = AdminState.categories.map(cat => {
+  if (!AdminState.categories.length) {
+    list.innerHTML = '<p class="form-hint" id="catListEmpty">No categories yet — add one to organise your inventory.</p>';
+    return;
+  }
+
+  list.innerHTML = AdminState.categories.map(cat => {
     const itemCount = AdminState.inventory.filter(i => i.category === cat.name).length;
     return `
-      <tr>
-        <td><strong>${escapeHtml(cat.name)}</strong><br><small style="color:var(--text-muted);">${escapeHtml(cat.description || '')}</small></td>
-        <td><i class="ph ${cat.icon || 'ph-tag'}" style="font-size: 1.25rem; color: var(--primary);"></i> <code>${escapeHtml(cat.icon || 'ph-tag')}</code></td>
-        <td><span style="background:#dcfce7; color:#166534; padding:0.15rem 0.5rem; border-radius:var(--radius-full); font-weight:700; font-size:0.75rem;">${itemCount} items</span></td>
-        <td>
-          <button class="btn-secondary-sm" onclick="deleteCategory('${cat.id}')" style="color: #dc2626;"><i class="ph ph-trash"></i></button>
-        </td>
-      </tr>
+      <div class="cat-row">
+        <i class="ph ${escapeHtml(cat.icon || 'ph-tag')} cat-row-icon"></i>
+        <div class="cat-row-main">
+          <div class="cat-row-name">${escapeHtml(cat.name)}</div>
+          ${cat.description ? `<div class="cat-row-desc">${escapeHtml(cat.description)}</div>` : ''}
+        </div>
+        <div class="cat-row-meta">
+          <span class="cat-count-pill">${itemCount} item${itemCount === 1 ? '' : 's'}</span>
+          <div class="cat-row-actions">
+            <button type="button" class="btn-secondary-sm" title="Edit category" onclick="editCategory('${cat.id}')"><i class="ph ph-pencil-simple"></i> Edit</button>
+            <button type="button" class="btn-secondary-sm" title="Delete category" onclick="deleteCategory('${cat.id}')" style="color:#dc2626;"><i class="ph ph-trash"></i></button>
+          </div>
+        </div>
+      </div>
     `;
   }).join('');
 }
@@ -392,7 +482,7 @@ function renderCategoriesTable() {
 async function deleteCategory(id) {
   if (!confirm('Delete this category?')) return;
   try {
-    const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
     if (res.ok) loadCategories();
   } catch (e) {}
 }
@@ -438,7 +528,7 @@ function initModals() {
     const synonyms = synRaw ? synRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [title.toLowerCase()];
 
     try {
-      const res = await fetch('/api/inventory', {
+      const res = await apiFetch('/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, category, quantity, unit, weight_kg, est_value_eur, co2_factor, synonyms, icon: newIconRaw ? (newIconRaw.startsWith('ph-') ? newIconRaw : 'ph-' + newIconRaw) : 'ph-package' })
@@ -466,7 +556,7 @@ function initModals() {
     const iconRaw = (document.getElementById('editIcon') ? document.getElementById('editIcon').value : '').trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
-      const res = await fetch(`/api/inventory/${id}`, {
+      const res = await apiFetch(`/api/inventory/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, category, quantity, unit, weight_kg, est_value_eur, co2_factor, synonyms, ...(iconRaw ? { icon: iconRaw.startsWith('ph-') ? iconRaw : 'ph-' + iconRaw } : {}) })
@@ -522,7 +612,7 @@ window.openEditModal = (id) => {
 // ==========================================================================
 async function loadAnalytics() {
   try {
-    const res = await fetch('/api/analytics');
+    const res = await apiFetch('/api/analytics');
     const data = await res.json();
     if (!data.success) return;
 
@@ -567,12 +657,82 @@ async function loadAnalytics() {
       </div>
       <div class="track" style="margin-bottom:0.4rem;"><div class="fill green" style="width:${Math.round((stays[k]/maxS)*100)}%;"></div></div>
     `).join('') : '<div style="color:var(--text-muted); font-size:0.8rem;">No durations recorded yet.</div>';
+
+    // 12th pass: extra KPIs
+    const avgEl = document.getElementById('statAvgValueItem');
+    if (avgEl) avgEl.textContent = `€${(data.avgValuePerItem || 0)}`;
+    const stockEl = document.getElementById('statStockValue');
+    if (stockEl) stockEl.textContent = `€${Math.round(data.stockValueEur || 0)}`;
+
+    // 12th pass: top swapped items
+    const topBox = document.getElementById('analyticsTopItems');
+    if (topBox) {
+      const top = data.topItems || [];
+      if (top.length) {
+        const maxT = Math.max(...top.map(t => t.count), 1);
+        topBox.innerHTML = top.map(t => `
+          <div class="topitem-row">
+            <div class="ti-head">
+              <span class="ti-title">${escapeHtml(t.title)}</span>
+              <span class="ti-count">× ${t.count}</span>
+            </div>
+            <div class="track"><div class="fill teal" style="width:${Math.round((t.count / maxT) * 100)}%;"></div></div>
+          </div>
+        `).join('');
+      } else {
+        topBox.innerHTML = '<p class="form-hint">No item data yet.</p>';
+      }
+    }
+
+    // 12th pass: category mix
+    const mixBox = document.getElementById('analyticsCategoryMix');
+    if (mixBox) {
+      const mix = data.categoryMix || [];
+      if (mix.length) {
+        const maxM = Math.max(...mix.map(m => m.count), 1);
+        mixBox.innerHTML = mix.map(m => `
+          <div class="mix-row">
+            <div class="mx-head">
+              <span class="mx-name">${escapeHtml(m.category)}</span>
+              <span class="mx-count">${m.count}</span>
+            </div>
+            <div class="track"><div class="fill green" style="width:${Math.round((m.count / maxM) * 100)}%;"></div></div>
+          </div>
+        `).join('');
+      } else {
+        mixBox.innerHTML = '<p class="form-hint">No item data yet.</p>';
+      }
+    }
+
+    // 12th pass: 6-month activity trend
+    const trendBox = document.getElementById('analyticsTrend');
+    if (trendBox) {
+      const trend = data.monthlyTrend || [];
+      if (trend.length) {
+        const maxV = Math.max(...trend.map(t => Math.max(t.items, t.swaps)), 1);
+        trendBox.innerHTML = trend.map(t => {
+          const v = Math.max(t.items, t.swaps);
+          const h = Math.max(3, Math.round((v / maxV) * 100));
+          return `
+            <div class="trend-col">
+              <div class="trend-bar-wrap">
+                <div class="trend-bar${v ? '' : ' zero'}" style="height:${h}%;">${v ? `<span class="tb-val">${t.items} items</span>` : ''}</div>
+              </div>
+              <div class="trend-label">${escapeHtml(t.label)}</div>
+              <div class="trend-sub">${t.swaps} swap${t.swaps === 1 ? '' : 's'}</div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        trendBox.innerHTML = '<p class="form-hint">No transaction data yet.</p>';
+      }
+    }
   } catch (e) {}
 }
 
 async function loadActivity() {
   try {
-    const res = await fetch('/api/transactions');
+    const res = await apiFetch('/api/transactions');
     const data = await res.json();
     if (!data.success) return;
     AdminState.transactions = data.transactions || [];
@@ -624,7 +784,7 @@ async function loadActivity() {
 window.deleteTransaction = async (id) => {
   if (!confirm('Delete this activity entry? This cannot be undone.')) return;
   try {
-    const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/transactions/${id}`, { method: 'DELETE' });
     if (res.ok) {
       loadActivity();
       loadAnalytics();
@@ -709,7 +869,7 @@ document.getElementById('formEditTx').addEventListener('submit', async (e) => {
     items
   };
   try {
-    const res = await fetch(`/api/transactions/${id}`, {
+    const res = await apiFetch(`/api/transactions/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -762,10 +922,6 @@ function renderUnlinkedItems() {
     return;
   }
 
-  const optionHtml = AdminState.inventory.map(it =>
-    `<option value="${it.id}">${escapeHtml(it.title)}${(it.synonyms || []).length ? ' — ' + escapeHtml(it.synonyms.join(', ')) : ''}</option>`
-  ).join('');
-
   box.innerHTML = list.map(u => `
     <div class="unlinked-row" id="linkrow-${encodeURIComponent(u.word)}">
       <div class="unlinked-word">
@@ -774,12 +930,12 @@ function renderUnlinkedItems() {
         <span class="unlinked-count">\u00d7 ${u.count}</span>
       </div>
       <div class="unlinked-controls">
-        <div class="link-col">
-          <input type="text" class="link-filter-input" placeholder="Filter pool items\u2026" autocomplete="off" />
-          <div class="link-group">
-            <select class="link-picker-select">${optionHtml || '<option value="">(no pool items yet)</option>'}</select>
-            <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link to existing</button>
+        <div class="link-group">
+          <div class="link-combo">
+            <input type="text" class="link-combo-input" placeholder="Search pool items\u2026" autocomplete="off" />
+            <div class="link-combo-dropdown"></div>
           </div>
+          <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link to existing</button>
         </div>
         <button class="btn-secondary-sm" data-create="${escapeHtml(u.word)}"><i class="ph ph-plus"></i> New pool item</button>
       </div>
@@ -790,26 +946,50 @@ function renderUnlinkedItems() {
     const word = row.querySelector('[data-create]').getAttribute('data-create');
     row.querySelector('[data-create]').onclick = () => createItemFromWord(word);
     row.querySelector('[data-link]').onclick = () => linkUnlinkedTo(word);
-    const filter = row.querySelector('.link-filter-input');
-    const select = row.querySelector('.link-picker-select');
-    if (filter && select) {
-      filter.addEventListener('input', () => {
-        const q = filter.value.trim().toLowerCase();
-        const opts = [...select.options].filter(o => o.value);
-        let visible = 0;
-        opts.forEach(o => {
-          const show = !q || o.textContent.toLowerCase().includes(q);
-          o.hidden = !show;
-          if (show) visible++;
-        });
-        if (q && visible === 0) opts.forEach(o => { o.hidden = false; });
-        const sel = select.selectedOptions && select.selectedOptions[0];
-        if (sel && sel.hidden) {
-          const fv = opts.find(o => !o.hidden);
-          if (fv) select.value = fv.value;
-        }
+
+    // Searchable pool-item picker: type to filter, click a suggestion to select.
+    const input = row.querySelector('.link-combo-input');
+    const dd = row.querySelector('.link-combo-dropdown');
+    const linkBtn = row.querySelector('[data-link]');
+    if (!input || !dd) return;
+    row.__selectedId = null;
+
+    const findMatches = (q) => {
+      const term = (q || '').trim().toLowerCase();
+      return AdminState.inventory.filter(it => {
+        if (it.title.toLowerCase().includes(term)) return true;
+        return (it.synonyms || []).some(s => String(s).toLowerCase().includes(term));
       });
-    }
+    };
+
+    const renderSuggestions = (q) => {
+      const m = findMatches(q).slice(0, 8);
+      dd.innerHTML = m.length ? m.map(it => `
+        <div class="link-combo-row${it.id === row.__selectedId ? ' selected' : ''}" data-id="${it.id}">
+          <i class="ph ${escapeHtml(it.icon || 'ph-package')} lc-icon"></i>
+          <span class="lc-title">${escapeHtml(it.title)}</span>
+          <span class="lc-syn">${escapeHtml((it.synonyms || []).slice(0, 3).join(', '))}</span>
+          <span class="lc-qty">\u00d7${it.quantity || 0}</span>
+        </div>`).join('')
+        : '<div class="link-combo-empty">No pool items match \u2014 use \u201cNew pool item\u201d instead.</div>';
+      dd.classList.add('open');
+      dd.querySelectorAll('.link-combo-row').forEach(el => {
+        el.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          const id = el.getAttribute('data-id');
+          const it = AdminState.inventory.find(x => x.id === id);
+          if (!it) return;
+          row.__selectedId = id;
+          input.value = it.title;
+          dd.classList.remove('open');
+          linkBtn.innerHTML = '<i class="ph ph-check"></i> Link: ' + escapeHtml(it.title);
+        });
+      });
+    };
+
+    input.addEventListener('input', () => renderSuggestions(input.value));
+    input.addEventListener('focus', () => renderSuggestions(input.value));
+    input.addEventListener('blur', () => setTimeout(() => dd.classList.remove('open'), 120));
   });
 }
 
@@ -824,11 +1004,18 @@ function setUnlinkedFeedback(msg, ok = true) {
 
 async function linkUnlinkedTo(word) {
   const rowEl = document.getElementById('linkrow-' + encodeURIComponent(word));
-  const sel = rowEl && rowEl.querySelector('.link-picker-select');
-  const targetId = sel ? sel.value : null;
-  if (!targetId) { setUnlinkedFeedback('Select an item to link to first.', false); return; }
+  let targetId = rowEl ? rowEl.__selectedId : null;
+  if (!targetId && rowEl) {
+    const input = rowEl.querySelector('.link-combo-input');
+    const typed = input ? input.value.trim().toLowerCase() : '';
+    if (typed) {
+      const exact = AdminState.inventory.find(it => it.title.toLowerCase() === typed);
+      if (exact) targetId = exact.id;
+    }
+  }
+  if (!targetId) { setUnlinkedFeedback('Search the pool and select a highlighted item first.', false); return; }
   try {
-    const res = await fetch('/api/admin/map-synonym', {
+    const res = await apiFetch('/api/admin/map-synonym', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ synonym: word, targetItemId: targetId })
@@ -887,7 +1074,7 @@ async function initSettingsTab() {
   settingsLoaded = true;
   let list = DEFAULT_ACCOMMODATIONS;
   try {
-    const res = await fetch('/api/settings');
+    const res = await apiFetch('/api/settings');
     const data = await res.json();
     if (data.success && data.settings) {
       document.getElementById('settingShopName').value = data.settings.shopName || '';
@@ -940,7 +1127,7 @@ document.getElementById('formShopSettings').addEventListener('submit', async (e)
   })).filter(a => a.name);
   const fb = document.getElementById('settingsFeedback');
   try {
-    const res = await fetch('/api/settings', {
+    const res = await apiFetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

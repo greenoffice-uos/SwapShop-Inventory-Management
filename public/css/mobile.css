@@ -1108,3 +1108,20 @@ body.mobile-kiosk-body {
 .chat-change-btn:hover {
   background: rgba(255, 255, 255, 0.34);
 }
+
+/* 12th pass: "add as new item" row always shown below matches */
+.sugg-row-custom { border-top: 1px dashed #cbd5e1; margin-top: 0.25rem; padding-top: 0.55rem; }
+
+/* 12th pass: in-place answer change feedback */
+.chat-row.user.bubble-updated .bubble-text { animation: bubbleUpdated 1.4s ease; }
+@keyframes bubbleUpdated {
+  0% { background: #d1fae5; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35); }
+  40% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.updated-badge { display: inline-block; margin-left: 0.45rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: #d1fae5; color: #065f46; font-size: 0.65rem; font-weight: 700; vertical-align: middle; }
+.chat-row.bot.bubble-updated .bubble-text { animation: bubbleQuestionFlash 1.2s ease; }
+@keyframes bubbleQuestionFlash {
+  0%, 60% { background: #ecfdf5; border-color: #6ee7b7; }
+  100% { background: #fff; }
+}

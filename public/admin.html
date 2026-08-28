@@ -129,52 +129,6 @@
           </table>
         </div>
 
-        <h3 class="inventory-subheading"><i class="ph ph-folder-simple"></i> Category Setup</h3>
-        <div class="categories-layout">
-          <!-- Add Category Form -->
-          <div class="card-box">
-            <h4><i class="ph ph-plus-circle"></i> Create New Item Category</h4>
-            <form id="formCreateCategory">
-              <div class="form-group">
-                <label for="catNameInput">Category Name *</label>
-                <input type="text" id="catNameInput" required placeholder="e.g. Sports & Outdoors, Games & Hobbies" />
-              </div>
-              <div class="form-group">
-                <label for="catIconInput">Phosphor Icon</label>
-                <div class="icon-pick-row">
-                  <i class="ph ph-tag cat-icon-preview" id="catIconPreview"></i>
-                  <input type="text" id="catIconInput" list="phIconOptions" value="tag" placeholder="Type a name, e.g. lamp" autocomplete="off" />
-                  <a class="btn-secondary-sm icon-browse" href="https://phosphoricons.com/" target="_blank" rel="noopener"><i class="ph ph-magnifying-glass"></i> Browse all icons</a>
-                </div>
-                <datalist id="phIconOptions"></datalist>
-                <small class="form-hint">Suggestions are the 1,530 icons bundled with this app — only those render in the UI.</small>
-              </div>
-              <div class="form-group">
-                <label for="catDescInput">Description</label>
-                <input type="text" id="catDescInput" placeholder="Brief description of category items" />
-              </div>
-              <button type="submit" class="btn-primary-sm" style="width: 100%; height: 42px;">
-                <i class="ph ph-folder-plus"></i> Save Category
-              </button>
-            </form>
-          </div>
-
-          <!-- Existing Categories List -->
-          <div class="card-box">
-            <h4><i class="ph ph-folders"></i> Existing Categories (<span id="catTotalBadge">0</span>)</h4>
-            <table class="admin-data-table">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th>Icon</th>
-                  <th>Items</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="categoriesTableBody"></tbody>
-            </table>
-          </div>
-        </div>
       </section>
 
       <!-- TAB 4: DEMOGRAPHICS & IMPACT -->
@@ -202,6 +156,16 @@
               <i class="ph ph-currency-eur"></i>
               <div class="val" id="statMoneySaved">€0</div>
               <div class="lbl">Student Value Saved</div>
+            </div>
+            <div class="stat-cell">
+              <i class="ph ph-calculator"></i>
+              <div class="val" id="statAvgValueItem">€0</div>
+              <div class="lbl">Avg. Value per Item</div>
+            </div>
+            <div class="stat-cell">
+              <i class="ph ph-vault"></i>
+              <div class="val" id="statStockValue">€0</div>
+              <div class="lbl">Stock Value in Pool</div>
             </div>
           </div>
         </div>
@@ -237,6 +201,25 @@
           <div class="card-box">
             <h4><i class="ph ph-calendar-dots"></i> Length of Stay</h4>
             <div id="stayListBody" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+          </div>
+
+          <div class="card-box">
+            <h4><i class="ph ph-trophy"></i> Top Swapped Items</h4>
+            <div id="analyticsTopItems" style="display: flex; flex-direction: column; gap: 0.55rem;">
+              <p class="form-hint">No item data yet.</p>
+            </div>
+          </div>
+
+          <div class="card-box">
+            <h4><i class="ph ph-pie-slice"></i> Category Mix</h4>
+            <div id="analyticsCategoryMix" style="display: flex; flex-direction: column; gap: 0.55rem;">
+              <p class="form-hint">No item data yet.</p>
+            </div>
+          </div>
+
+          <div class="card-box" style="grid-column: 1 / -1;">
+            <h4><i class="ph ph-chart-line-up"></i> Monthly Activity <span class="form-hint" style="font-weight: 400;">(last 6 months)</span></h4>
+            <div class="trend-chart" id="analyticsTrend"><p class="form-hint">No transaction data yet.</p></div>
           </div>
         </div>
       </section>
@@ -275,6 +258,21 @@
               </div>
               <div id="settingsFeedback" class="feedback-badge" style="display: none;"></div>
             </form>
+          </div>
+
+          <div class="card-box" style="grid-column: 1 / -1;">
+            <div class="cat-head-row">
+              <div>
+                <h4 style="margin: 0;"><i class="ph ph-squares-four"></i> Item Categories</h4>
+                <p class="form-hint" style="margin: 0.2rem 0 0;">Organise your inventory with categories — <span id="catTotalBadge">0</span> existing.</p>
+              </div>
+              <button type="button" class="btn-primary-sm" id="btnOpenCatAdd" style="white-space: nowrap;">
+                <i class="ph ph-plus"></i> Add category
+              </button>
+            </div>
+            <div class="cat-list" id="catList">
+              <p class="form-hint" id="catListEmpty">No categories yet — add one to organise your inventory.</p>
+            </div>
           </div>
         </div>
 
@@ -345,6 +343,43 @@
           <div class="modal-footer">
             <button type="button" class="btn-secondary-sm" id="btnCancelNewItem">Cancel</button>
             <button type="submit" class="btn-primary-sm"><i class="ph ph-floppy-disk"></i> Save Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT ITEM CATEGORY -->
+  <div class="modal-backdrop" id="categoryModal" style="display: none;">
+    <div class="modal-card" style="max-width: 470px;">
+      <div class="modal-header">
+        <h3 id="categoryModalTitle"><i class="ph ph-folder-plus"></i> Add Item Category</h3>
+        <button class="btn-close" id="btnCloseCatModal"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="formCatEdit">
+          <input type="hidden" id="catEditId" />
+          <div class="form-group">
+            <label for="catEditName">Category Name *</label>
+            <input type="text" id="catEditName" required placeholder="e.g. Sports & Outdoors, Games & Hobbies" />
+          </div>
+          <div class="form-group">
+            <label for="catEditIcon">Phosphor Icon</label>
+            <div class="icon-pick-row">
+              <i class="ph ph-tag cat-icon-preview" id="catIconPreview"></i>
+              <input type="text" id="catEditIcon" list="phIconOptions" placeholder="e.g. lamp, sofa, plant" autocomplete="off" />
+              <a class="btn-secondary-sm icon-browse" href="https://phosphoricons.com/" target="_blank" rel="noopener"><i class="ph ph-magnifying-glass"></i> Browse all icons</a>
+            </div>
+            <datalist id="phIconOptions"></datalist>
+            <small class="form-hint">Suggestions are the icons bundled with this app — only those render in the UI. Renaming a category also updates the items that use it.</small>
+          </div>
+          <div class="form-group">
+            <label for="catEditDesc">Description</label>
+            <input type="text" id="catEditDesc" placeholder="Brief description of category items" />
+          </div>
+          <div class="modal-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+            <button type="button" class="btn-secondary-sm" id="btnCatCancel">Cancel</button>
+            <button type="submit" class="btn-primary-sm" id="btnCatSave"><i class="ph ph-check"></i> <span id="catSaveLabel">Add category</span></button>
           </div>
         </form>
       </div>
