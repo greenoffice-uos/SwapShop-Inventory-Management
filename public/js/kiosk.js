@@ -238,7 +238,7 @@ async function handleStep1Choice(value, label) {
         options: null
       });
     }
-    setTimeout(() => renderNextQuestion(), 350);
+    proceedAfterChoice();
   }, 350);
 }
 
@@ -271,11 +271,7 @@ async function handleStep2_1Choice(value, label) {
 
   await saveStep('2.1', 'International Status', { is_international: value });
 
-  showTyping();
-  setTimeout(() => {
-    hideTyping();
-    renderNextQuestion();
-  }, 350);
+  proceedAfterChoice();
 }
 
 /** Step 2.2: Accommodation */
@@ -341,11 +337,7 @@ async function handleStep2_2Choice(choiceText) {
 
   await saveStep('2.2', 'Accommodation Type', { accommodation: choiceText });
 
-  showTyping();
-  setTimeout(() => {
-    hideTyping();
-    renderNextQuestion();
-  }, 350);
+  proceedAfterChoice();
 }
 
 /** Step 2.3: Stay Duration */
@@ -370,11 +362,7 @@ async function handleStep2_3Choice(durationLabel) {
 
   await saveStep('2.3', 'Stay Duration', { stay_duration: durationLabel });
 
-  showTyping();
-  setTimeout(() => {
-    hideTyping();
-    renderNextQuestion();
-  }, 350);
+  proceedAfterChoice();
 }
 
 /** Step 3: Action Type (WITH HEARTFELT THANK-YOU RESPONSES) */
@@ -435,9 +423,7 @@ async function handleStep3Choice(actionType, actionLabel) {
       });
     }
 
-    setTimeout(() => {
-      renderNextQuestion();
-    }, 400);
+    proceedAfterChoice();
   }, 350);
 }
 
@@ -461,7 +447,7 @@ function renderStep4_InteractiveItemCardInChat() {
     <div class="chat-avatar bot"><img src="images/logo-square.png" alt=""></div>
     <div class="chat-bubble-content" style="max-width: 96%; width: 100%;">
       <div class="bubble-text">
-        Almost done! <strong>(Optional)</strong> What did you ${actionWord}? Type generic items or synonyms below (e.g. <em>"2 mugs"</em>, <em>"1 plate"</em>, <em>"3 spoons"</em>, <em>"pillow"</em>, <em>"fork"</em>).
+        Almost done! <strong>(Optional)</strong> What did you ${actionWord}? List your items below (e.g. <em>"3 mugs, 1 plate, 2 forks"</em>).
       </div>
 
       <!-- IN-CHAT INTERACTIVE CARD -->
@@ -473,15 +459,11 @@ function renderStep4_InteractiveItemCardInChat() {
 
         <!-- Input Bar inside chat -->
         <div class="chat-input-bar">
-          <div class="field-qty">
-            <label for="chatInputQty">Qty</label>
-            <input type="number" id="chatInputQty" min="1" max="99" value="1" />
-          </div>
           <div class="field-item">
-            <label for="chatInputName">Generic Item or Synonym</label>
+            <label for="chatInputName">Your items — separate with commas</label>
             <div class="input-icon-wrap">
               <i class="ph ph-magnifying-glass"></i>
-              <input type="text" id="chatInputName" placeholder="e.g. fork, plate, cup, pan..." autocomplete="off" />
+              <input type="text" id="chatInputName" placeholder="e.g. 3 mugs, 1 plate, 2 forks" autocomplete="off" />
               <button type="button" class="btn-clear-txt" id="chatBtnClear" style="display: none;">
                 <i class="ph ph-x"></i>
               </button>
@@ -494,6 +476,11 @@ function renderStep4_InteractiveItemCardInChat() {
           <button type="button" class="btn-chat-add" id="chatBtnAdd">
             <i class="ph ph-plus-circle"></i> Add
           </button>
+        </div>
+
+        <div class="chat-list-hint">
+          <i class="ph ph-list-magnifying-glasses"></i>
+          List items separated by commas — e.g. <strong>3 mugs, 1 plate, 2 forks</strong> (the number sets the quantity)
         </div>
 
         <!-- Quick Generic Chips -->
@@ -545,7 +532,6 @@ function renderStep4_InteractiveItemCardInChat() {
 }
 
 function initChatCardHandlers(cardRow) {
-  const inputQty = cardRow.querySelector('#chatInputQty');
   const inputName = cardRow.querySelector('#chatInputName');
   const btnAdd = cardRow.querySelector('#chatBtnAdd');
   const btnClear = cardRow.querySelector('#chatBtnClear');
@@ -553,11 +539,29 @@ function initChatCardHandlers(cardRow) {
   const btnSkip = cardRow.querySelector('#btnChatSkip');
   const btnComplete = cardRow.querySelector('#btnChatComplete');
 
+  // Number of commas in the input at last check — when it grows, the
+  // segments between the old and the new last comma are finished and get
+  // committed (one per typed comma, the whole batch when pasted).
+  let lastCommaCount = 0;
+
   inputName.addEventListener('input', () => {
-    const txt = inputName.value.trim();
-    if (txt) {
+    const val = inputName.value;
+    const commaCount = (val.match(/,/g) || []).length;
+    if (commaCount > lastCommaCount) {
+      const finishedText = val.slice(0, val.lastIndexOf(',') + 1);
+      const segs = getListSegments(finishedText);
+      for (let i = lastCommaCount; i < commaCount; i++) {
+        if (segs[i]) commitOneSegment(segs[i]);
+      }
+      dropdown.style.display = 'none';
+    }
+    lastCommaCount = commaCount;
+
+    const seg = getActiveSegment(val);
+    if (val.trim()) {
       btnClear.style.display = 'block';
-      handleChatTyping(txt, inputQty, dropdown);
+      if (seg) handleChatTyping(inputName, dropdown);
+      else dropdown.style.display = 'none';
     } else {
       btnClear.style.display = 'none';
       dropdown.style.display = 'none';
@@ -566,35 +570,43 @@ function initChatCardHandlers(cardRow) {
 
   btnClear.onclick = () => {
     inputName.value = '';
+    lastCommaCount = 0;
     btnClear.style.display = 'none';
     dropdown.style.display = 'none';
     inputName.focus();
   };
 
   inputName.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const first = dropdown.querySelector('.sugg-row');
-      if (dropdown.style.display !== 'none' && first) {
-        first.click();
-      } else {
-        addFromChatInputs(inputQty, inputName, dropdown, btnClear);
-      }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const first = dropdown.querySelector('.sugg-row');
+    if (dropdown.style.display !== 'none' && first) {
+      first.click();
+    } else if (getActiveSegment(inputName.value)) {
+      commitActiveSegment(inputName, dropdown);
+    } else {
+      commitAllPendingSegments(inputName);
     }
   });
 
-  btnAdd.onclick = () => addFromChatInputs(inputQty, inputName, dropdown, btnClear);
+  btnAdd.onclick = () => {
+    if (getActiveSegment(inputName.value)) commitActiveSegment(inputName, dropdown);
+    else commitAllPendingSegments(inputName);
+  };
 
-  // Quick chips
+  // Quick chips: one-tap items that also append to the list text, so the
+  // input stays the single record of the swap.
   cardRow.querySelectorAll('.quick-item-chip').forEach(chip => {
     chip.onclick = () => {
-      const q = chip.getAttribute('data-q');
-      const matched = findBestInventoryMatch(q);
-      if (matched) {
-        addItemToSwap(matched.item, 1, matched.synonymMatched);
-      } else {
-        addItemToSwap({ title: q, category: 'General', icon: 'ph-package' }, 1);
-      }
+      const label = chip.getAttribute('data-q');
+      let v = inputName.value.replace(/\s*$/, '');
+      if (v) v += ',';
+      inputName.value = (v ? v + ' ' : '') + label + ', ';
+      lastCommaCount = (inputName.value.match(/,/g) || []).length;
+      commitOneSegment(label);
+      btnClear.style.display = 'block';
+      dropdown.style.display = 'none';
+      inputName.focus();
     };
   });
 
@@ -606,7 +618,7 @@ function initChatCardHandlers(cardRow) {
   };
 
   btnComplete.onclick = () => {
-    finalizeKioskSwap();
+    commitAllPendingSegments(inputName).then(() => finalizeKioskSwap());
   };
 
   document.addEventListener('click', (e) => {
@@ -640,13 +652,110 @@ function parseAmountAndItem(rawText) {
   return { amount: 1, itemName: parsedItem };
 }
 
-function handleChatTyping(rawInput, inputQty, dropdown) {
-  const { amount, itemName } = parseAmountAndItem(rawInput);
-  if (amount > 1) inputQty.value = amount;
+/* ------------------------------------------------------------------ *
+ * List input (step 4): the user types a comma-separated list with
+ * per-item quantities, e.g. "3 mugs, 1 plate, 2 forks".
+ *   - each comma completes the current segment (item gets committed)
+ *   - suggestions cover ONLY the active segment (text after the last
+ *     comma) and show the finished segment, quantity included
+ *   - clicking a suggestion rewrites only the active segment and
+ *     appends ", " so typing momentum continues
+ * ------------------------------------------------------------------ */
 
-  const query = (itemName || rawInput).toLowerCase().trim();
+function getListSegments(text) {
+  return String(text || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function getActiveSegment(text) {
+  const t = String(text || '');
+  const i = t.lastIndexOf(',');
+  return (i === -1 ? t : t.slice(i + 1)).trim();
+}
+
+// Rewrite only the active segment (text after the last comma), keep
+// everything typed before it, re-focus with the cursor at the end.
+function setCompletedSegment(inputEl, segmentText) {
+  if (!inputEl) return;
+  const val = String(inputEl.value || '');
+  const i = val.lastIndexOf(',');
+  const head = i === -1 ? '' : val.slice(0, i + 1).replace(/\s*$/, '') + ' ';
+  inputEl.value = head + segmentText + ', ';
+  inputEl.focus();
+  try {
+    const L = inputEl.value.length;
+    inputEl.setSelectionRange(L, L);
+  } catch (err) {}
+}
+
+// Record a committed "qty|title" pair so the same segment is never
+// committed twice (comma, then Enter, then Complete, ...).
+function trackCommitted(amount, title) {
+  if (!State.committedSegments) State.committedSegments = [];
+  const key = amount + '|' + String(title).toLowerCase();
+  if (State.committedSegments.includes(key)) return false;
+  State.committedSegments.push(key);
+  return true;
+}
+
+// Commit one finished segment to the swap list.
+async function commitOneSegment(segment) {
+  const seg = String(segment || '').trim();
+  if (!seg) return false;
+  const { amount, itemName } = parseAmountAndItem(seg);
+  if (!itemName) return false;
+  if (!trackCommitted(amount, itemName)) return false;
+  const matched = findBestInventoryMatch(itemName);
+  if (matched) {
+    await addItemToSwap(matched.item, amount, matched.synonymMatched);
+  } else {
+    await addItemToSwap({
+      id: null,
+      title: itemName,
+      category: 'Miscellaneous',
+      icon: 'ph-package'
+    }, amount);
+  }
+  return true;
+}
+
+// Commit every complete segment in the list (Enter / Add / Complete —
+// e.g. after pasting a whole list at once).
+async function commitAllPendingSegments(inputEl) {
+  let addedAny = false;
+  for (const seg of getListSegments(inputEl ? inputEl.value : '')) {
+    if (await commitOneSegment(seg)) addedAny = true;
+  }
+  return addedAny;
+}
+
+// Commit the active segment and normalize the typed text
+// ("2 pla" -> "2 Plate, "), then keep focus for the next item.
+async function commitActiveSegment(inputEl, dropdown) {
+  const seg = getActiveSegment(inputEl ? inputEl.value : '');
+  if (!seg) return false;
+  const { amount, itemName } = parseAmountAndItem(seg);
+  if (!itemName) return false;
+  const q = amount > 1 ? amount + ' ' : '';
+  const matched = findBestInventoryMatch(itemName);
+  const label = matched ? matched.item.title : itemName;
+  setCompletedSegment(inputEl, q + label);
+  if (dropdown) dropdown.style.display = 'none';
+  const btnClear = document.getElementById('chatBtnClear');
+  if (btnClear && inputEl.value) btnClear.style.display = 'block';
+  if (trackCommitted(amount, label)) {
+    if (matched) await addItemToSwap(matched.item, amount, matched.synonymMatched);
+    else await addItemToSwap({ id: null, title: label, category: 'Miscellaneous', icon: 'ph-package' }, amount);
+  }
+  if (inputEl) inputEl.focus();
+  return true;
+}
+
+function handleChatTyping(inputName, dropdown) {
+  const segment = getActiveSegment(inputName ? inputName.value : '');
+  const { amount, itemName } = parseAmountAndItem(segment);
+  const query = (itemName || '').toLowerCase().trim();
   if (!query) {
-    dropdown.style.display = 'none';
+    if (dropdown) dropdown.style.display = 'none';
     return;
   }
 
@@ -671,7 +780,8 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
     if (isMatch) matches.push({ item, synonymMatched: synMatch });
   });
 
-  const newTitle = itemName || rawInput;
+  const newTitle = itemName || segment;
+  const q = amount > 1 ? amount + ' ' : '';
 
   // The "log as a new item" row is ALWAYS available, even when pool
   // suggestions exist — a fuzzy match (e.g. "käse" vs "Käsemauken")
@@ -681,7 +791,7 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
       <div class="sugg-left-box">
         <i class="ph ph-plus-circle"></i>
         <div>
-          <div class="sugg-title-txt">Add as a new item: <strong>"${escapeHtml(newTitle)}"</strong></div>
+          <div class="sugg-title-txt">Add as a new item: <strong>"${escapeHtml(q + newTitle)}"</strong></div>
         </div>
       </div>
     </div>
@@ -691,16 +801,19 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
     const customBtn = dropdown.querySelector('#chatBtnCustom');
     if (!customBtn) return;
     customBtn.onclick = () => {
-      const amt = parseInt(inputQty.value, 10) || 1;
-      addItemToSwap({
-        id: null,
-        title: newTitle,
-        category: 'Miscellaneous',
-        icon: 'ph-package'
-      }, amt);
-      inputQty.value = '1';
-      dropdown.parentElement.querySelector('input').value = '';
+      setCompletedSegment(inputName, q + newTitle);
       dropdown.style.display = 'none';
+      if (trackCommitted(amount, newTitle)) {
+        addItemToSwap({
+          id: null,
+          title: newTitle,
+          category: 'Miscellaneous',
+          icon: 'ph-package'
+        }, amount);
+      }
+      const btnClear = document.getElementById('chatBtnClear');
+      if (btnClear && inputName.value) btnClear.style.display = 'block';
+      inputName.focus();
     };
   };
 
@@ -723,7 +836,7 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
         <div class="sugg-left-box">
           <i class="ph ${item.icon || 'ph-package'}"></i>
           <div>
-            <span class="sugg-title-txt">${escapeHtml(item.title)}</span>
+            <span class="sugg-title-txt">${q}${escapeHtml(item.title)}</span>
             ${synTag}
           </div>
         </div>
@@ -739,19 +852,26 @@ function handleChatTyping(rawInput, inputQty, dropdown) {
       const itemId = row.getAttribute('data-id');
       const item = State.inventory.find(i => i.id === itemId);
       const syn = row.getAttribute('data-syn');
-      const amt = parseInt(inputQty.value, 10) || 1;
+      if (!item) return;
 
-      if (item) addItemToSwap(item, amt, syn);
-      inputQty.value = '1';
-      dropdown.parentElement.querySelector('input').value = '';
+      // Autocomplete ONLY the active segment: "3 Mug, 4 Spoon, 2 Pla"
+      // -> "3 Mug, 4 Spoon, 2 Plate, " — then commit that item.
+      setCompletedSegment(inputName, q + item.title);
       dropdown.style.display = 'none';
+      if (trackCommitted(amount, item.title)) {
+        addItemToSwap(item, amount, syn || null);
+      }
+      const btnClear = document.getElementById('chatBtnClear');
+      if (btnClear && inputName.value) btnClear.style.display = 'block';
+      inputName.focus();
     };
   });
   wireCustomRow();
 }
 
 function findBestInventoryMatch(query) {
-  const q = query.toLowerCase().trim();
+  const q = String(query || '').toLowerCase().trim();
+  if (!q) return null;
   for (const item of State.inventory) {
     if (item.title.toLowerCase() === q || item.title.toLowerCase().includes(q)) {
       return { item, synonymMatched: null };
@@ -765,31 +885,6 @@ function findBestInventoryMatch(query) {
     }
   }
   return null;
-}
-
-function addFromChatInputs(inputQty, inputName, dropdown, btnClear) {
-  const raw = inputName.value.trim();
-  if (!raw) return;
-
-  const { amount, itemName } = parseAmountAndItem(raw);
-  const finalAmt = Math.max(1, parseInt(inputQty.value, 10) || amount);
-
-  const matched = findBestInventoryMatch(itemName || raw);
-  if (matched) {
-    addItemToSwap(matched.item, finalAmt, matched.synonymMatched);
-  } else {
-    addItemToSwap({
-      id: null,
-      title: itemName || raw,
-      category: 'Miscellaneous',
-      icon: 'ph-package'
-    }, finalAmt);
-  }
-
-  inputQty.value = '1';
-  inputName.value = '';
-  btnClear.style.display = 'none';
-  dropdown.style.display = 'none';
 }
 
 async function addItemToSwap(item, amount = 1, synonymTag = null) {
@@ -1071,7 +1166,7 @@ function clearChat() {
   document.getElementById('chatThread').innerHTML = '';
 }
 
-function addBotMessage({ text, options = null }) {
+function addBotMessage({ text, options = null, scroll = true }) {
   const thread = document.getElementById('chatThread');
   const row = document.createElement('div');
   row.className = 'chat-row bot';
@@ -1119,13 +1214,19 @@ function addBotMessage({ text, options = null }) {
     });
   }
 
-  scrollChatBottom();
+  if (scroll) scrollChatBottom();
 }
 
 // When set (a step key), the next addUserMessage for that step updates the
 // existing bubble in place instead of appending a new one — the in-place
 // answer-change flow (no confirm, later answers kept).
 let pendingAnswerUpdate = null;
+
+// The chat row of a bubble that was just updated in place. While set,
+// scrollChatBottom() is suppressed so an answer change never yanks the
+// view back to the bottom of the conversation; the choice handlers
+// re-center this row instead (see proceedAfterChoice).
+let inPlaceCommit = null;
 
 function addUserMessage(text, stepNumber = null) {
   const thread = document.getElementById('chatThread');
@@ -1137,11 +1238,21 @@ function addUserMessage(text, stepNumber = null) {
     });
     if (existing) {
       const bubble = existing.querySelector('.bubble-text');
-      if (bubble) bubble.innerHTML = escapeHtml(text) + ' <span class="updated-badge">updated</span>';
-      existing.classList.remove('bubble-updated');
-      void existing.offsetWidth; // restart the flash animation
-      existing.classList.add('bubble-updated');
+      // Re-selecting the same answer is a silent no-op: no badge, no flash.
+      const currentBase = bubble
+        ? bubble.innerHTML.replace(/ ?<span class="updated-badge">updated<\/span>\s*$/, '')
+        : '';
+      const sameText = !!bubble && currentBase === escapeHtml(text);
+      if (bubble && !sameText) {
+        bubble.innerHTML = escapeHtml(text) + ' <span class="updated-badge">updated</span>';
+      }
+      if (!sameText) {
+        existing.classList.remove('bubble-updated');
+        void existing.offsetWidth; // restart the flash animation
+        existing.classList.add('bubble-updated');
+      }
       pendingAnswerUpdate = null;
+      inPlaceCommit = existing;
       rearmPastOptionCards();
       existing.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       return;
@@ -1149,6 +1260,7 @@ function addUserMessage(text, stepNumber = null) {
     pendingAnswerUpdate = null;
   }
 
+  inPlaceCommit = null;
   const row = document.createElement('div');
   row.className = 'chat-row user';
 
@@ -1190,9 +1302,47 @@ function disableCurrentOptions() {
 
 /**
  * Re-arm the option cards of questions that already have a saved answer, so
- * tapping a previous response anywhere in the (scrolled) history opens the
- * same change flow as the "Change" chip on the message.
+ * tapping a previous response anywhere in the (scrolled) history changes the
+ * answer immediately — one click, no intermediate "change mode" step. The
+ * "Change" chip on the message still exists for explicitly re-opening a
+ * question (e.g. to type a custom accommodation).
  */
+/**
+ * Stage an in-place answer change for a step: mark the next commit for that
+ * step as an in-place bubble update and park every other question's cards.
+ * Shared by the "Change" chip flow (changeStepAnswer, which additionally
+ * shows the hint + scrolls to the question) and the one-click flow where a
+ * saved answer card is tapped directly.
+ */
+function prepareInPlaceChange(step) {
+  const thread = document.getElementById('chatThread');
+  if (!thread) return;
+  const userRow = [...thread.querySelectorAll('.chat-row.user')].find(r => {
+    const btn = r.querySelector('[data-change-step]');
+    return btn && btn.getAttribute('data-change-step') === String(step);
+  });
+  let qRow = userRow ? userRow.previousElementSibling : null;
+  while (qRow && !(qRow.classList && qRow.classList.contains('bot'))) qRow = qRow.previousElementSibling;
+
+  pendingAnswerUpdate = step;
+  State.currentStep = step;
+
+  if (qRow) {
+    qRow.querySelectorAll('.option-card-btn').forEach(b => {
+      b.disabled = false;
+      b.classList.remove('option-past');
+      b.title = '';
+      if (b.__origAction) b.onclick = b.__origAction;
+    });
+  }
+  // Park the cards of every other question so only this one is live.
+  thread.querySelectorAll('.chat-row.bot').forEach(row => {
+    if (row === qRow) return;
+    row.querySelectorAll('.option-card-btn').forEach(b => { b.disabled = true; });
+  });
+  return qRow;
+}
+
 function rearmPastOptionCards() {
   const thread = document.getElementById('chatThread');
   if (!thread) return;
@@ -1207,8 +1357,12 @@ function rearmPastOptionCards() {
         btns.forEach(b => {
           b.disabled = false;
           b.classList.add('option-past');
-          b.title = 'Change this answer';
-          b.onclick = () => changeStepAnswer(step);
+          b.title = 'Tap to change your answer to this';
+          // One click = the answer changes: stage the in-place update, then
+          // run the original choice action directly (no intermediate step).
+          b.onclick = b.__origAction
+            ? () => { prepareInPlaceChange(step); b.__origAction(b); }
+            : () => changeStepAnswer(step);
         });
         return;
       }
@@ -1229,12 +1383,31 @@ function hideTyping() {
 }
 
 function scrollChatBottom() {
+  if (inPlaceCommit) return; // keep the view on an in-place answer change
   const win = document.getElementById('cfChatWindow');
   if (win) {
     setTimeout(() => {
       win.scrollTop = win.scrollHeight;
     }, 40);
   }
+}
+
+/**
+ * Shared "answer committed" tail: typing indicator, then the next question.
+ * For in-place answer changes, re-centers the updated bubble afterwards
+ * instead of letting the conversation snap to the bottom.
+ */
+function proceedAfterChoice() {
+  showTyping();
+  setTimeout(() => {
+    hideTyping();
+    renderNextQuestion();
+    const row = inPlaceCommit;
+    if (row) {
+      inPlaceCommit = null;
+      setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+    }
+  }, 350);
 }
 
 function replaySavedChat() {
@@ -1287,11 +1460,6 @@ window.changeStepAnswer = function (stepKey) {
   const thread = document.getElementById('chatThread');
   if (!thread) return;
 
-  const findUserRow = (key) => [...thread.querySelectorAll('.chat-row.user')].find(r => {
-    const btn = r.querySelector('[data-change-step]');
-    return btn && btn.getAttribute('data-change-step') === key;
-  });
-
   if (stepKey === '4') {
     // Items: nothing earlier is affected, so just clear the items and re-ask.
     State.sessionData.items = [];
@@ -1303,32 +1471,17 @@ window.changeStepAnswer = function (stepKey) {
   }
 
   // No confirm — jump straight into the change: re-enable the original
-  // question's option cards so the user can tap their new answer.
-  const userRow = findUserRow(stepKey);
-  let qRow = userRow ? userRow.previousElementSibling : null;
-  while (qRow && !(qRow.classList && qRow.classList.contains('bot'))) qRow = qRow.previousElementSibling;
+  // question's option cards (parking all others) so the user can tap their
+  // new answer.
+  const qRow = prepareInPlaceChange(stepKey);
 
-  pendingAnswerUpdate = stepKey;
-  State.currentStep = stepKey;
-
-  if (qRow) {
-    qRow.querySelectorAll('.option-card-btn').forEach(b => {
-      b.disabled = false;
-      b.classList.remove('option-past');
-      b.title = '';
-      if (b.__origAction) b.onclick = b.__origAction;
-    });
-  }
-  // Park the cards of every other question so only this one is live.
-  thread.querySelectorAll('.chat-row.bot').forEach(row => {
-    if (row === qRow) return;
-    row.querySelectorAll('.option-card-btn').forEach(b => { b.disabled = true; });
-  });
-
-  addBotMessage({
-    text: "No problem — just tap the option you'd like instead. Your other answers are kept unless this change affects them.",
-    options: null
-  });
+  // Show the hint once — re-opening an already-open question must not stack
+  // identical hint bubbles. No bottom scroll: the view stays on the question.
+  const hintText = "No problem — just tap the option you'd like instead. Your other answers are kept unless this change affects them.";
+  const lastBot = [...thread.querySelectorAll('.chat-row.bot')].pop();
+  const hintShown = lastBot && lastBot.querySelector('.bubble-text') &&
+    lastBot.querySelector('.bubble-text').textContent.includes('just tap the option');
+  if (!hintShown) addBotMessage({ text: hintText, options: null, scroll: false });
   persistKioskSession();
   if (qRow) qRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };

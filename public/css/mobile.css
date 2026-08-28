@@ -520,31 +520,22 @@ body.mobile-kiosk-body {
   position: relative;
 }
 
-.field-qty {
-  width: 64px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.field-qty label,
 .field-item label {
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--text-muted);
 }
 
-.field-qty input {
-  width: 100%;
-  padding: 0.65rem 0.35rem;
-  border: 1.5px solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: 1rem;
-  font-weight: 700;
-  text-align: center;
-  color: var(--text-main);
-  background: white;
+.chat-list-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0.3rem 0.1rem 0;
 }
+
+.chat-list-hint strong { color: var(--text-main); }
 
 .field-item {
   flex: 1;
