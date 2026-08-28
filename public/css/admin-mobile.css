@@ -1,0 +1,286 @@
+/* ==========================================================================
+   Global Belongings — Staff Admin Portal: Responsive Layer
+   (phones & tablets) — mirrors the kiosk's separate mobile.css architecture.
+
+   Loaded AFTER admin.css; desktop rules are never touched. This layer is
+   purely additive and organises each admin surface the way a thumb works:
+
+     0. baseline guards … all widths (tall modal overflow protection)
+     1. ≤ 900px … inventory table transforms into a stacked card list
+     2. ≤ 640px … phone chrome: compact header, sticky tab bar, full-width
+        toolbars, 16px inputs (no iOS zoom), bottom-sheet modals
+     3. ≤ 560px … form stacking inside modals, stacked action footers
+     4. ≤ 480px … micro refinements for small phones
+     5. pointer:coarse … larger tap targets for touch screens only
+
+   New admin components should follow the same patterns:
+     - rows of fields → `.form-row` (stacks automatically on phones)
+     - table cells that need a name on mobile → `data-label="…"`
+     - header buttons with optional text → wrap text in `.btn-label`
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   0. Baseline guards — all widths
+   -------------------------------------------------------------------------- */
+
+/* Tall modals (edit item, edit activity) must never clip on short screens:
+   the card scrolls, the page behind does not. */
+.modal-card {
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* --------------------------------------------------------------------------
+   1. ≤ 900px — Stock Inventory table → stacked card list
+   Each <tr> becomes a card; td[data-label] grows a small field label above
+   its value. Weight / Value / CO₂ share one stat row (3-up grid).
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .admin-data-table { font-size: 0.88rem; }
+  .admin-data-table thead { display: none; }
+  .admin-data-table tbody { display: block; }
+
+  .admin-data-table tr {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.7rem 1rem;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-data-table tr:last-child { border-bottom: none; }
+  .admin-data-table tr:hover td { background: transparent; }
+  .admin-data-table td { border: none; padding: 0; }
+
+  /* full-width rows: item header, category, stock, tags, actions */
+  .admin-data-table td:first-child,
+  .admin-data-table td:nth-child(2),
+  .admin-data-table td:nth-child(3),
+  .admin-data-table td:nth-child(7),
+  .admin-data-table td:nth-child(8) { grid-column: 1 / -1; }
+
+  /* weight / value / CO₂: one stat cell each, three across */
+  .admin-data-table td:nth-child(4),
+  .admin-data-table td:nth-child(5),
+  .admin-data-table td:nth-child(6) {
+    grid-column: span 2;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  /* empty-state row (single td with colspan) spans the card */
+  .admin-data-table td[colspan] { grid-column: 1 / -1; }
+
+  /* data-label → floating field label */
+  .admin-data-table td[data-label] { display: flex; flex-direction: column; gap: 0.3rem; }
+  .admin-data-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  /* Category & Stock Pool: label left, value right */
+  .admin-data-table td:nth-child(2),
+  .admin-data-table td:nth-child(3) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Tags: editor takes the full card width, add-tag field stretches */
+  .admin-data-table td:nth-child(7) .tag-editor { max-width: 100%; }
+  .admin-data-table td:nth-child(7) .tag-add-form { width: 100%; }
+  .admin-data-table td:nth-child(7) .tag-add-input { flex: 1; width: auto; min-width: 0; }
+
+  /* Actions: full-width footer row with two equal buttons */
+  .admin-data-table td:nth-child(8) {
+    padding-top: 0.65rem;
+    border-top: 1px dashed var(--border);
+  }
+  .admin-data-table td:nth-child(8) > div { width: 100%; gap: 0.6rem; }
+  .admin-data-table td:nth-child(8) .btn-secondary-sm { flex: 1; justify-content: center; }
+}
+
+/* --------------------------------------------------------------------------
+   2. ≤ 640px — phone chrome
+   -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+
+  /* 2a. Header: icon-only actions, tighter rhythm */
+  .admin-top-header { padding: 0.65rem 1rem; gap: 0.5rem; }
+  .logo-box { width: 38px; height: 38px; }
+  .title-row h1 { font-size: 1.05rem; }
+  .staff-badge { display: none; }
+  .header-actions { gap: 0.4rem; }
+  .btn-header-link,
+  .btn-header-lock { padding: 0.5rem 0.55rem; }
+  .btn-header-link .btn-label,
+  .btn-header-lock .btn-label { display: none; }
+
+  /* 2b. Tab bar: sticky + snap-scrolling so tabs stay reachable */
+  .admin-nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    padding: 0.4rem 0.75rem;
+    scroll-snap-type: x proximity;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  }
+  .nav-btn {
+    padding: 0.55rem 0.8rem;
+    font-size: 0.82rem;
+    scroll-snap-align: start;
+  }
+
+  /* 2c. Content */
+  .admin-main-container { padding: 1rem; }
+  .tab-section { gap: 1rem; }
+  .card-box { padding: 1.1rem; }
+  .card-box h4 { font-size: 0.92rem; }
+
+  /* Headings with a .form-hint: the hint is a blockified flex item and
+     would squeeze the title text until it wraps mid-phrase (e.g. "By
+     Action" → "By / Action"). Allow wrapping and give the hint its own
+     line; the title keeps the full row. */
+  .card-box h4 { flex-wrap: wrap; }
+  .card-box h4 .form-hint { flex: 1 1 100%; margin-top: 0.1rem; }
+
+  /* 2d. Toolbars: search on its own line, buttons fill the next line */
+  .section-toolbar { gap: 0.6rem; }
+  .search-box { flex: 1 1 100%; min-width: 0; }
+  .toolbar-btns { width: 100%; }
+  .toolbar-btns .btn-primary-sm,
+  .toolbar-btns .btn-secondary-sm { flex: 1; justify-content: center; }
+
+  /* 2e. 16px inputs — stops iOS Safari from zooming into focused fields */
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  select { font-size: 16px; }
+
+  /* 2f. Unlinked entries: one thumb-friendly column per control */
+  .unlinked-panel { padding: 0.9rem; }
+  .unlinked-row { padding: 0.7rem 0.85rem; }
+  .unlinked-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .link-group { flex-direction: column; align-items: stretch; }
+  .link-combo { min-width: 0; }
+  .link-combo-input { border-radius: 10px; }
+  .link-group .btn-primary-sm { border-radius: 10px; justify-content: center; }
+  .unlinked-controls .btn-secondary-sm { justify-content: center; }
+
+  /* 2g. Analytics */
+  .eco-hero-card { padding: 1.1rem; gap: 0.85rem; }
+  .eco-hero-card h2 { font-size: 1.2rem; }
+  .eco-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.9rem 1rem;
+    padding: 0.9rem;
+  }
+  .stat-cell .val { font-size: 1.25rem; }
+  .analytics-row { grid-template-columns: 1fr; gap: 1rem; }
+  .action-cards-row { gap: 0.6rem; }
+  .action-stat-card { flex: 1 1 100%; }
+  .action-pct-row { flex-direction: column; align-items: stretch; }
+  .action-pct-chip { width: 100%; }
+  .trend-chart { gap: 0.45rem; }
+  .trend-label { font-size: 0.65rem; }
+  .trend-sub { font-size: 0.6rem; }
+  .trend-bar .tb-val { font-size: 0.62rem; }
+
+  /* 2h. Activity timeline: title + actions on one line, time below */
+  .timeline { padding-left: 1.5rem; gap: 0.9rem; }
+  .timeline::before { left: 0.55rem; }
+  .timeline-dot { left: -1.5rem; width: 20px; height: 20px; font-size: 0.7rem; }
+  .timeline-header { flex-wrap: wrap; row-gap: 0.15rem; }
+  .timeline-time { order: 3; }
+
+  /* 2i. Settings */
+  .cat-row { flex-wrap: wrap; row-gap: 0.6rem; }
+  .cat-row-meta { width: 100%; justify-content: space-between; }
+  .accom-row { grid-template-columns: 1fr 40px; gap: 0.5rem; }
+  .accom-row .accom-name { grid-column: 1; grid-row: 1; }
+  .accom-row .accom-del { grid-column: 2; grid-row: 1; }
+  .accom-row .accom-desc { grid-column: 1 / -1; grid-row: 2; }
+  .accom-row .accom-icon { display: none; }
+
+  /* 2j. Modals → bottom sheets: full width, rounded top, scrollable */
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .modal-card {
+    max-width: 100%;
+    border-radius: 18px 18px 0 0;
+    max-height: 92vh;
+    max-height: 92dvh;
+  }
+  .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: white;
+    padding: 0.9rem 1rem;
+  }
+  .modal-header h3 { font-size: 0.98rem; }
+  .modal-body { padding: 1rem; }
+}
+
+/* --------------------------------------------------------------------------
+   3. ≤ 560px — form stacking (modal content)
+   -------------------------------------------------------------------------- */
+@media (max-width: 560px) {
+  /* two/three-column form rows become single columns */
+  .form-row { flex-direction: column; gap: 0.75rem; }
+  .form-row > .form-group { width: 100%; flex: none; }
+
+  /* icon picker: "browse all icons" drops to its own line */
+  .icon-pick-row { flex-wrap: wrap; }
+  .icon-pick-row .icon-browse { flex: 1 1 100%; justify-content: center; }
+
+  /* modal footers: stacked full-width, primary action on top */
+  .modal-footer { flex-direction: column-reverse; gap: 0.6rem; }
+  .modal-footer .btn-primary-sm,
+  .modal-footer .btn-secondary-sm { width: 100%; justify-content: center; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions > button { width: 100%; justify-content: center; }
+
+  /* edit-activity item row: title full width, amount + badge + delete below;
+     the suggestion dropdown joins the flow so it never covers other rows */
+  .edit-tx-item-row { flex-wrap: wrap; }
+  .edit-tx-item-row .edit-tx-item-title { flex: 1 1 100%; }
+  .edit-tx-item-row .edit-tx-item-amount { width: 84px; }
+  .edit-item-suggest { position: static; width: 100%; }
+}
+
+/* --------------------------------------------------------------------------
+   4. ≤ 480px — small phones
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  .sub-row { display: none; }
+  .admin-top-header { padding: 0.6rem 0.9rem; }
+  .title-row h1 { font-size: 1rem; }
+  .logo-box { width: 34px; height: 34px; }
+  .eco-hero-card h2 { font-size: 1.12rem; }
+  .stat-cell .val { font-size: 1.15rem; }
+  .auth-box { padding: 1.5rem 1.25rem; }
+}
+
+/* --------------------------------------------------------------------------
+   5. Touch screens — bigger tap targets (desktop mice unaffected)
+   -------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  .btn-step { width: 36px; height: 36px; }
+  .step-num { min-width: 32px; font-size: 1rem; }
+  .timeline-action-btn { padding: 0.45rem 0.6rem; }
+  .btn-close { font-size: 1.35rem; }
+  .cat-pill { padding: 0.5rem 0.95rem; }
+  .tag-add-btn { width: 34px; height: 34px; }
+  .tag-pill { padding: 0.2rem 0.55rem; font-size: 0.78rem; }
+  .tag-pill-x { font-size: 1.05rem; padding: 0 0.15rem; }
+}

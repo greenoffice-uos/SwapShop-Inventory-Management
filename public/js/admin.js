@@ -217,18 +217,18 @@ function renderInventoryTable() {
             </div>
           </div>
         </td>
-        <td><span style="background: var(--bg-page); padding: 0.2rem 0.5rem; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 600;">${escapeHtml(item.category)}</span></td>
-        <td>
+        <td data-label="Category"><span style="background: var(--bg-page); padding: 0.2rem 0.5rem; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 600;">${escapeHtml(item.category)}</span></td>
+        <td data-label="Stock Pool">
           <div class="stepper-wrap">
             <button class="btn-step" onclick="updateStock('${item.id}', ${(item.quantity || 0) - 1})">-</button>
             <span class="step-num">${item.quantity || 0}</span>
             <button class="btn-step" onclick="updateStock('${item.id}', ${(item.quantity || 0) + 1})">+</button>
           </div>
         </td>
-        <td>${item.weight_kg || 0.5} kg</td>
-        <td>€${item.est_value_eur || 10.0}</td>
-        <td>${item.co2_factor || ((item.weight_kg || 0.5) * 2.8).toFixed(1)} kg</td>
-        <td>
+        <td data-label="Weight">${item.weight_kg || 0.5} kg</td>
+        <td data-label="Value">€${item.est_value_eur || 10.0}</td>
+        <td data-label="CO₂ Factor">${item.co2_factor || ((item.weight_kg || 0.5) * 2.8).toFixed(1)} kg</td>
+        <td data-label="Tags">
           <div class="tag-editor">
             <div class="tag-chips">${tagPills}</div>
             <form class="tag-add-form" data-tagitem="${item.id}">
@@ -856,7 +856,7 @@ function buildEditTxItemRow(it) {
   return `
     <div class="edit-tx-item-row${linked ? ' linked' : ''}" data-item-id="${linked ? escapeHtml(it.id) : ''}" data-item-category="${linked && it.category ? escapeHtml(it.category) : ''}">
       <input type="text" class="edit-tx-item-title" value="${escapeHtml(it.title || '')}" placeholder="Search pool items…" />
-      <input type="number" class="edit-tx-item-amount" value="${it.amount || 1}" min="1" style="width: 70px;" />
+      <input type="number" class="edit-tx-item-amount" value="${it.amount || 1}" min="1" />
       <span class="pool-link-badge" title="Linked to a pool item"><i class="ph ph-link"></i> Pool</span>
       <button type="button" class="btn-secondary-sm edit-tx-item-del" title="Remove item"><i class="ph ph-trash"></i></button>
       <div class="edit-item-suggest"></div>
