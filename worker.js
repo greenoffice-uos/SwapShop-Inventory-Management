@@ -1231,39 +1231,29 @@ async function handleApi(request, env, url) {
     const items = Array.isArray(data.items) ? data.items : [];
     let totalWeight = 0, totalValue = 0, totalCo2 = 0;
 
+    const matchedIds = [];
     items.forEach(it => {
       const qty = parseInt(it.amount, 10) || 1;
-      let invItem = inventory.find(i => i.id === it.id || i.title.toLowerCase() === (it.title || "").toLowerCase());
+      const itemWord = (it.title || "").toLowerCase();
+      let invItem = inventory.find(i => i.id === it.id || i.title.toLowerCase() === itemWord || (i.synonyms || []).some(s => String(s).toLowerCase() === itemWord));
       if (invItem) {
         if (action === "drop-off" || action === "return") {
           invItem.quantity = (invItem.quantity || 0) + qty;
         } else if (action === "pick-up") {
           invItem.quantity = Math.max(0, (invItem.quantity || 0) - qty);
         }
+        matchedIds.push(invItem.id);
         invItem.lastUpdated = now;
         totalWeight += (invItem.weight_kg || 0.5) * qty;
         totalValue += (invItem.est_value_eur || 10.0) * qty;
         totalCo2 += (invItem.co2_factor || 2.0) * qty;
       } else if (action === "drop-off") {
-        const newItem = {
-          id: "item-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
-          title: it.title || "Donated Item",
-          category: it.category || "Miscellaneous",
-          quantity: qty,
-          unit: "pcs",
-          condition: "Good",
-          location: "Intake Shelf",
-          icon: "ph-package",
-          weight_kg: 0.5,
-          est_value_eur: 8.0,
-          co2_factor: 1.8,
-          synonyms: [it.title ? it.title.toLowerCase() : "item"],
-          lastUpdated: now
-        };
-        inventory.unshift(newItem);
-        totalWeight += newItem.weight_kg * qty;
-        totalValue += newItem.est_value_eur * qty;
-        totalCo2 += newItem.co2_factor * qty;
+        // Unmatched word: leave it unlinked inside the transaction. Staff can
+        // link it to a pool or create a new item in the Synonyms tab.
+        totalWeight += 0.5 * qty;
+        totalValue += 8.0 * qty;
+        totalCo2 += 1.8 * qty;
+        matchedIds.push(null);
       }
     });
 
@@ -1278,8 +1268,8 @@ async function handleApi(request, env, url) {
       accommodation: data.accommodation || null,
       stay_duration: data.stay_duration || null,
       action_type: action,
-      items: items.map(it => ({
-        id: it.id || null,
+      items: items.map((it, i) => ({
+        id: it.id || matchedIds[i] || null,
         title: it.title || "Item",
         amount: parseInt(it.amount, 10) || 1,
         category: it.category || "Miscellaneous"
@@ -1363,6 +1353,77 @@ async function handleApi(request, env, url) {
   if (path === "transactions" && method === "GET") {
     const transactions = await getKV("transactions", []);
     return jsonResponse({ success: true, count: transactions.length, transactions });
+  }
+
+  if (path.startsWith("transactions/") && method === "PUT") {
+    const txId = path.replace("transactions/", "");
+    const body = await request.json().catch(() => ({}));
+    let transactions = await getKV("transactions", []);
+    const idx = transactions.findIndex(t => t.id === txId);
+    if (idx === -1) {
+      return new Response(JSON.stringify({ success: false, error: "Transaction not found" }), { status: 404, headers: corsHeaders });
+    }
+    const tx = transactions[idx];
+    ["user_type", "is_international", "accommodation", "stay_duration", "action_type"].forEach(k => {
+      if (body[k] !== undefined) tx[k] = body[k];
+    });
+    if (Array.isArray(body.items)) {
+      tx.items = body.items.map(it => ({
+        id: it.id || null,
+        title: String(it.title || "Item").trim(),
+        amount: Math.max(1, parseInt(it.amount, 10) || 1),
+        category: it.category || "Miscellaneous"
+      }));
+    }
+    const inv = await getKV("inventory", DEFAULT_INVENTORY);
+    let w = 0, v = 0, c = 0;
+    tx.items.forEach(it => {
+      const word = (it.title || "").toLowerCase();
+      const invItem = inv.find(i => i.id === it.id || i.title.toLowerCase() === word || (i.synonyms || []).some(s => String(s).toLowerCase() === word));
+      const qty = parseInt(it.amount, 10) || 1;
+      w += (invItem && invItem.weight_kg != null ? invItem.weight_kg : 0.5) * qty;
+      v += (invItem && invItem.est_value_eur != null ? invItem.est_value_eur : 8.0) * qty;
+      c += (invItem && invItem.co2_factor != null ? invItem.co2_factor : 1.8) * qty;
+    });
+    tx.weight_diverted_kg = parseFloat(w.toFixed(2));
+    tx.value_saved_eur = parseFloat(v.toFixed(2));
+    tx.co2_saved_kg = parseFloat(c.toFixed(2));
+    transactions[idx] = tx;
+    await putKV("transactions", transactions);
+    return new Response(JSON.stringify({ success: true, transaction: tx }), { headers: corsHeaders });
+  }
+
+  if (path === "settings" && method === "GET") {
+    const s = await getKV("settings", DEFAULT_SETTINGS, true);
+    return new Response(JSON.stringify({
+      success: true,
+      settings: {
+        shopName: s.shopName || "Global Belongings",
+        co2KgPerKgGoods: s.co2KgPerKgGoods != null ? s.co2KgPerKgGoods : 2.8,
+        accommodations: Array.isArray(s.accommodations) ? s.accommodations : []
+      }
+    }), { headers: corsHeaders });
+  }
+
+  if (path === "settings" && method === "PUT") {
+    const body = await request.json().catch(() => ({}));
+    const s = await getKV("settings", DEFAULT_SETTINGS, true);
+    if (body.shopName !== undefined) s.shopName = String(body.shopName).trim() || s.shopName;
+    if (body.co2KgPerKgGoods !== undefined && !isNaN(parseFloat(body.co2KgPerKgGoods))) s.co2KgPerKgGoods = parseFloat(body.co2KgPerKgGoods);
+    if (Array.isArray(body.accommodations)) {
+      s.accommodations = body.accommodations
+        .filter(a => a && String(a.name || "").trim())
+        .map(a => ({
+          name: String(a.name).trim(),
+          desc: String(a.desc || "").trim(),
+          icon: String(a.icon || "").trim() || "ph-buildings"
+        }));
+    }
+    await putKV("settings", s);
+    return new Response(JSON.stringify({
+      success: true,
+      settings: { shopName: s.shopName, co2KgPerKgGoods: s.co2KgPerKgGoods, accommodations: s.accommodations || [] }
+    }), { headers: corsHeaders });
   }
 
   if (path.startsWith("transactions/") && method === "DELETE") {

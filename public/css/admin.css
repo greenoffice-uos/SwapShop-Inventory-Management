@@ -227,13 +227,13 @@ body {
 .logo-box {
   width: 42px;
   height: 42px;
-  background: linear-gradient(135deg, #0f172a, #334155);
-  color: #38bdf8;
+  background: #ffffff;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  overflow: hidden;
 }
 
 .title-row {
@@ -1007,5 +1007,24 @@ input:focus, select:focus {
 
 /* Activity timeline entry delete */
 .timeline-item { position: relative; }
-.tx-delete-btn { position: absolute; top: 0.35rem; right: 0.35rem; border: none; background: transparent; color: #9ca3af; cursor: pointer; padding: 0.25rem; border-radius: 6px; line-height: 1; }
-.tx-delete-btn:hover { color: #dc2626; background: #fef2f2; }
+.timeline-actions { display: inline-flex; gap: 0.3rem; margin-left: auto; }
+.timeline-action-btn { border: 1px solid var(--border); background: #fff; color: var(--text-muted); cursor: pointer; padding: 0.28rem 0.5rem; border-radius: 8px; line-height: 1; font-size: 0.95rem; }
+.timeline-action-btn:hover { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+.timeline-action-btn.danger:hover { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+
+/* Unlinked entries: inline link picker */
+.link-picker { width: 100%; display: flex; gap: 0.4rem; align-items: center; }
+.link-picker-select { flex: 1; min-width: 220px; max-width: 460px; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; background: #fff; color: #111827; }
+
+/* Settings & Content tab */
+.settings-layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 1000px) { .settings-layout { grid-template-columns: 1fr; } }
+.accom-row { display: grid; grid-template-columns: 1.2fr 1.6fr 110px 38px; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+@media (max-width: 640px) { .accom-row { grid-template-columns: 1fr 38px; } .accom-row .accom-desc { grid-column: 1 / -2; } .accom-row .accom-icon { display: none; } }
+.accom-row input { padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }
+.accom-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12); }
+
+/* Edit-transaction modal item rows */
+.edit-tx-item-row { display: flex; gap: 0.4rem; align-items: center; }
+.edit-tx-item-row input[type="text"] { flex: 1; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }
+.edit-tx-item-row input[type="number"] { padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }

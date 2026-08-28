@@ -263,8 +263,17 @@ body.mobile-kiosk-body {
 }
 
 .chat-avatar.bot {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.chat-avatar.bot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  padding: 2px;
 }
 
 .chat-avatar.user {
@@ -1074,4 +1083,24 @@ body.mobile-kiosk-body {
   .receipt-title {
     color: #064e3b !important;
   }
+}
+
+/* Change-past-answer button (inside user bubble meta) */
+.chat-change-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.14rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.chat-change-btn:hover {
+  background: rgba(255, 255, 255, 0.34);
 }

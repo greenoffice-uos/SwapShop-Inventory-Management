@@ -27,10 +27,9 @@
           <label for="adminPassInput">Admin Password</label>
           <div class="input-wrap">
             <i class="ph ph-lock-key"></i>
-            <input type="password" id="adminPassInput" placeholder="Password (default: swapadmin)" required autofocus />
+            <input type="password" id="adminPassInput" placeholder="Staff password" required autofocus />
           </div>
         </div>
-        <div class="auth-hint">Default password: <code>swapadmin</code></div>
         <div id="authErrorMsg" class="auth-err" style="display: none;"></div>
         <button type="submit" class="btn-auth-submit">
           <i class="ph ph-sign-in"></i> Unlock Admin Panel
@@ -83,6 +82,9 @@
       </button>
       <button class="nav-btn" data-tab="activity">
         <i class="ph ph-list-bullets"></i> Live Activity Trail
+      </button>
+      <button class="nav-btn" data-tab="settings">
+        <i class="ph ph-sliders-horizontal"></i> Settings &amp; Content
       </button>
     </nav>
 
@@ -140,33 +142,8 @@
         <div class="unlinked-panel">
           <h4><i class="ph ph-link"></i> Unlinked kiosk entries</h4>
           <p>Words entered at the kiosk that don't match any stock pool item yet. Link a word to an existing item, or turn it into a new one (the word becomes its name and a synonym).</p>
+          <div id="unlinkedFeedback" class="feedback-badge" style="display: none;"></div>
           <div id="unlinkedItemsList" class="unlinked-list"></div>
-        </div>
-
-        <div class="mapping-tool-card">
-          <h4><i class="ph ph-link"></i> Map Word / Submission to Existing Item Pool</h4>
-          <form id="formMapSynonymPool">
-            <div class="form-grid">
-              <div class="grid-col-4">
-                <label for="mapWord">Entered Word / Submission *</label>
-                <input type="text" id="mapWord" required placeholder="e.g. skillet, beaker, flatware, comforter" />
-              </div>
-              <div class="grid-col-4">
-                <label for="mapTargetItem">Target Generic Item *</label>
-                <select id="mapTargetItem" required></select>
-              </div>
-              <div class="grid-col-2">
-                <label for="mapDeltaQty">Stock Adjustment (+/-)</label>
-                <input type="number" id="mapDeltaQty" value="0" placeholder="+1, +2, -1" />
-              </div>
-              <div class="grid-col-2 btn-col">
-                <button type="submit" class="btn-primary-sm" style="height: 42px; width: 100%;">
-                  <i class="ph ph-check"></i> Map & Update
-                </button>
-              </div>
-            </div>
-          </form>
-          <div id="mapFeedback" class="feedback-badge" style="display: none;"></div>
         </div>
 
         <div class="directory-container">
@@ -296,6 +273,38 @@
         </div>
       </section>
 
+      <!-- TAB 6: SETTINGS & CONTENT -->
+      <section class="tab-section" id="sec-settings" style="display: none;">
+        <div class="settings-layout">
+          <div class="card-box">
+            <h4><i class="ph ph-buildings"></i> Student Accommodation Options</h4>
+            <p class="form-hint" style="margin: 0.25rem 0 0.85rem;">These are the residence choices offered to students at the kiosk. Edit names and descriptions, add or remove rows, then save.</p>
+            <div id="accomEditorList"></div>
+            <button type="button" class="btn-secondary-sm" id="btnAddAccomRow" style="margin-top: 0.6rem;">
+              <i class="ph ph-plus"></i> Add accommodation
+            </button>
+          </div>
+
+          <div class="card-box">
+            <h4><i class="ph ph-gear"></i> Shop Settings</h4>
+            <form id="formShopSettings">
+              <div class="form-group">
+                <label for="settingShopName">Shop name</label>
+                <input type="text" id="settingShopName" />
+              </div>
+              <div class="form-group">
+                <label for="settingCo2">CO&#8322; avoided per kg of goods (kg)</label>
+                <input type="number" id="settingCo2" step="0.1" min="0" />
+              </div>
+              <div id="settingsFeedback" class="feedback-badge" style="display: none;"></div>
+              <button type="submit" class="btn-primary-sm" style="width: 100%; height: 42px;">
+                <i class="ph ph-floppy-disk"></i> Save settings
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -402,6 +411,68 @@
           <div class="modal-footer">
             <button type="button" class="btn-secondary-sm" id="btnCancelEdit">Cancel</button>
             <button type="submit" class="btn-primary-sm"><i class="ph ph-floppy-disk"></i> Update Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT ACTIVITY ENTRY -->
+  <div class="modal-backdrop" id="editTxModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="ph ph-pencil-simple"></i> Edit Activity Entry</h3>
+        <button class="btn-close" id="btnCloseEditTxModal"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="formEditTx">
+          <input type="hidden" id="editTxId" />
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="editTxUserType">Visitor type</label>
+              <select id="editTxUserType">
+                <option value="student">Student</option>
+                <option value="non-student">Non-Student</option>
+                <option value="unspecified">Unspecified</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="editTxAction">Action</label>
+              <select id="editTxAction">
+                <option value="drop-off">Drop-Off</option>
+                <option value="pick-up">Pick-Up</option>
+                <option value="return">Return</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="editTxInternational">International status</label>
+              <select id="editTxInternational">
+                <option value="">&#8212;</option>
+                <option value="international">International</option>
+                <option value="domestic">Domestic</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="editTxStay">Stay duration</label>
+              <input type="text" id="editTxStay" placeholder="e.g. 1 Semester (4&#8211;6 months)" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="editTxAccom">Accommodation</label>
+            <input type="text" id="editTxAccom" placeholder="e.g. Parkside Student Residence" />
+          </div>
+          <div class="form-group">
+            <label>Items in this entry</label>
+            <div id="editTxItemsList" style="display: flex; flex-direction: column; gap: 0.4rem;"></div>
+            <button type="button" class="btn-secondary-sm" id="btnAddEditTxItem" style="margin-top: 0.4rem;">
+              <i class="ph ph-plus"></i> Add item
+            </button>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary-sm" id="btnCancelEditTx">Cancel</button>
+            <button type="submit" class="btn-primary-sm"><i class="ph ph-floppy-disk"></i> Save entry</button>
           </div>
         </form>
       </div>

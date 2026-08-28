@@ -32,6 +32,9 @@ const STUDENT_ACCOMMODATIONS = [
   { id: 'westend', name: 'West End College Lodge', desc: 'Central University Hall', icon: 'ph-buildings' }
 ];
 
+// Configurable at runtime via /api/settings (edited in the admin panel)
+let KIOSK_ACCOMMODATIONS = STUDENT_ACCOMMODATIONS;
+
 const STAY_DURATIONS = [
   { id: 'exchange', label: 'Short-term Exchange (< 4 months)', desc: 'Erasmus / Visiting scholar', icon: 'ph-hourglass-medium' },
   { id: '1-semester', label: '1 Semester (4–6 months)', desc: 'One study term', icon: 'ph-calendar-blank' },
@@ -40,7 +43,23 @@ const STAY_DURATIONS = [
   { id: 'other', label: 'Other / Flexible Stay', desc: 'PhD, research, or undecided', icon: 'ph-clock' }
 ];
 
-document.addEventListener('DOMContentLoaded', () => {
+async function loadShopSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    const data = await res.json();
+    if (data.success && data.settings && Array.isArray(data.settings.accommodations) && data.settings.accommodations.length) {
+      KIOSK_ACCOMMODATIONS = data.settings.accommodations.map(a => ({
+        id: 'acc-' + String(a.name || 'residence').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name: a.name,
+        desc: a.desc || '',
+        icon: a.icon || 'ph-buildings'
+      }));
+    }
+  } catch (err) {}
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadShopSettings();
   initKioskSession();
   loadInventory();
 
@@ -269,7 +288,7 @@ function renderStep2_2_Accommodation() {
       icon: 'ph-house-simple',
       action: () => handleStep2_2Choice('Private Accommodation')
     },
-    ...STUDENT_ACCOMMODATIONS.map(hall => ({
+    ...KIOSK_ACCOMMODATIONS.map(hall => ({
       id: `acc-${hall.id}`,
       title: hall.name,
       desc: hall.desc,
@@ -435,7 +454,7 @@ function renderStep4_InteractiveItemCardInChat() {
   cardRow.id = 'step4ChatRow';
 
   cardRow.innerHTML = `
-    <div class="chat-avatar bot"><i class="ph ph-recycle"></i></div>
+    <div class="chat-avatar bot"><img src="images/logo-square.png" alt=""></div>
     <div class="chat-bubble-content" style="max-width: 96%; width: 100%;">
       <div class="bubble-text">
         Almost done! <strong>(Optional)</strong> What did you ${actionWord}? Type generic items or synonyms below (e.g. <em>"2 mugs"</em>, <em>"1 plate"</em>, <em>"3 spoons"</em>, <em>"pillow"</em>, <em>"fork"</em>).
@@ -862,6 +881,7 @@ function renderChatSelectedItems() {
 async function finalizeKioskSwap() {
   const cardRow = document.getElementById('step4ChatRow');
   if (cardRow) cardRow.remove();
+  document.querySelectorAll('.chat-change-btn').forEach(b => b.remove());
 
   // Add user summary bubble
   const summaryText = State.sessionData.items.length > 0
@@ -1058,7 +1078,7 @@ function addBotMessage({ text, options = null }) {
   }
 
   row.innerHTML = `
-    <div class="chat-avatar bot"><i class="ph ph-recycle"></i></div>
+    <div class="chat-avatar bot"><img src="images/logo-square.png" alt=""></div>
     <div class="chat-bubble-content">
       <div class="bubble-text">${text}</div>
       ${optionsHtml}
@@ -1091,16 +1111,26 @@ function addUserMessage(text, stepNumber = null) {
     ? `<span class="saved-step-chip"><i class="ph ph-check-circle"></i> Step ${stepNumber} Saved</span>`
     : '';
 
+  const canChange = ['1', '2.1', '2.2', '2.3', '3'].includes(stepNumber);
+  const changeBtn = canChange
+    ? `<button type="button" class="chat-change-btn" data-change-step="${stepNumber}" title="Change this answer"><i class="ph ph-pencil-simple"></i> Change</button>`
+    : '';
+
   row.innerHTML = `
     <div class="chat-avatar user"><i class="ph ph-user"></i></div>
     <div class="chat-bubble-content">
       <div class="bubble-text">${escapeHtml(text)}</div>
       <div class="bubble-meta">
         ${savedBadge}
+        ${changeBtn}
         <span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
     </div>
   `;
+
+  if (canChange) {
+    row.querySelector('.chat-change-btn').onclick = () => changeStepAnswer(stepNumber);
+  }
 
   thread.appendChild(row);
   scrollChatBottom();
@@ -1166,6 +1196,34 @@ function replaySavedChat() {
     renderStep4_InteractiveItemCardInChat();
   }
 }
+
+const KIOSK_STEP_ORDER = ['1', '2.1', '2.2', '2.3', '3', '4'];
+
+window.changeStepAnswer = function (stepKey) {
+  stepKey = String(stepKey);
+  const idx = KIOSK_STEP_ORDER.indexOf(stepKey);
+  if (idx === -1) return;
+  if (!confirm('Change this answer? Any answers after it will be reset.')) return;
+  const toClear = KIOSK_STEP_ORDER.slice(idx);
+  const d = State.sessionData;
+  if (toClear.includes('1')) d.user_type = null;
+  if (toClear.includes('2.1')) d.is_international = null;
+  if (toClear.includes('2.2')) d.accommodation = null;
+  if (toClear.includes('2.3')) d.stay_duration = null;
+  if (toClear.includes('3')) d.action_type = null;
+  if (toClear.includes('4')) d.items = [];
+  State.currentStep = stepKey;
+  clearChat();
+  replaySavedChat();
+  try {
+    localStorage.setItem('swapshop_kiosk_session', JSON.stringify({
+      sessionId: State.sessionId,
+      currentStep: State.currentStep,
+      sessionData: State.sessionData,
+      savedAt: new Date().toISOString()
+    }));
+  } catch (err) {}
+};
 
 async function loadInventory() {
   try {

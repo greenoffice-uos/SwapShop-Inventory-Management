@@ -14,7 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initNavTabs();
   initInventoryActions();
-  initSynonymMapping();
   initCategoryManagement();
   initModals();
 
@@ -70,7 +69,7 @@ function initAuth() {
         adminApp.style.display = 'flex';
         loadAllAdminData();
       } else {
-        errMsg.textContent = 'Incorrect password (default: swapadmin)';
+        errMsg.textContent = 'Incorrect password';
         errMsg.style.display = 'block';
       }
     }
@@ -112,6 +111,7 @@ function initNavTabs() {
       if (target === 'categories') renderCategoriesTable();
       if (target === 'analytics') loadAnalytics();
       if (target === 'activity') loadActivity();
+      if (target === 'settings') initSettingsTab();
     };
   });
 }
@@ -230,41 +230,6 @@ async function deleteItem(id) {
 // ==========================================================================
 // SYNONYM & POOL MAPPING ASSISTANT
 // ==========================================================================
-function initSynonymMapping() {
-  const form = document.getElementById('formMapSynonymPool');
-  const feedback = document.getElementById('mapFeedback');
-
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const syn = document.getElementById('mapWord').value.trim();
-    const targetId = document.getElementById('mapTargetItem').value;
-    const delta = parseInt(document.getElementById('mapDeltaQty').value, 10) || 0;
-
-    if (!syn || !targetId) return;
-
-    try {
-      const res = await fetch('/api/admin/map-synonym', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          synonym: syn,
-          targetItemId: targetId,
-          adjustQuantity: delta
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        feedback.textContent = `✓ ${data.message}`;
-        feedback.style.display = 'block';
-        document.getElementById('mapWord').value = '';
-        document.getElementById('mapDeltaQty').value = '0';
-        loadInventory();
-        setTimeout(() => { feedback.style.display = 'none'; }, 4000);
-      }
-    } catch (e) {}
-  };
-}
-
 function renderSynonymDirectory() {
   const grid = document.getElementById('synonymDirectoryGrid');
   if (!grid) return;
@@ -628,13 +593,23 @@ async function loadActivity() {
           <div class="timeline-header">
             <span>${actionName} (${escapeHtml(tx.user_type)})</span>
             <span class="timeline-time">${new Date(tx.timestamp).toLocaleString()}</span>
-            <button class="tx-delete-btn" title="Delete this entry" onclick="deleteTransaction('${tx.id}')"><i class="ph ph-trash"></i></button>
+            <div class="timeline-actions">
+              <button class="timeline-action-btn" title="Edit entry" data-edit="${tx.id}"><i class="ph ph-pencil-simple"></i></button>
+              <button class="timeline-action-btn danger" title="Delete entry" data-del="${tx.id}"><i class="ph ph-trash"></i></button>
+            </div>
           </div>
           <div class="timeline-meta">${tx.accommodation ? escapeHtml(tx.accommodation) + ' • ' : ''}${tx.weight_diverted_kg || 0} kg diverted • €${tx.value_saved_eur || 0}</div>
           <div class="timeline-pills">${itemsHtml || '<span style="font-size:0.72rem; color:var(--text-muted);">General visit</span>'}</div>
         </div>
       `;
     }).join('');
+
+    list.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.onclick = () => editTransaction(btn.getAttribute('data-edit'));
+    });
+    list.querySelectorAll('[data-del]').forEach(btn => {
+      btn.onclick = () => deleteTransaction(btn.getAttribute('data-del'));
+    });
     renderUnlinkedItems();
   } catch (e) {}
 }
@@ -652,6 +627,99 @@ window.deleteTransaction = async (id) => {
     }
   } catch (e) {}
 };
+
+// ==========================================================================
+// EDIT ACTIVITY ENTRY
+// ==========================================================================
+function renderEditTxItems(items) {
+  const listEl = document.getElementById('editTxItemsList');
+  if (!listEl) return;
+  listEl.innerHTML = (items || []).map(it => `
+    <div class="edit-tx-item-row">
+      <input type="text" class="edit-tx-item-title" value="${escapeHtml(it.title || '')}" placeholder="Item name" />
+      <input type="number" class="edit-tx-item-amount" value="${it.amount || 1}" min="1" style="width: 70px;" />
+      <button type="button" class="btn-secondary-sm edit-tx-item-del" title="Remove item"><i class="ph ph-trash"></i></button>
+    </div>
+  `).join('') || '<div class="form-hint">No items in this entry.</div>';
+  listEl.querySelectorAll('.edit-tx-item-del').forEach(btn => {
+    btn.onclick = () => btn.closest('.edit-tx-item-row').remove();
+  });
+}
+
+const setSelectValue = (selEl, val) => {
+  if (val && ![...selEl.options].some(o => o.value === val)) {
+    const o = document.createElement('option');
+    o.value = val; o.textContent = val;
+    selEl.appendChild(o);
+  }
+  selEl.value = val || (selEl.options[0] ? selEl.options[0].value : '');
+};
+
+window.editTransaction = (id) => {
+  const tx = (AdminState.transactions || []).find(t => t.id === id);
+  if (!tx) { alert('Entry not found (it may have been deleted).'); return; }
+  document.getElementById('editTxId').value = id;
+  setSelectValue(document.getElementById('editTxUserType'), tx.user_type || 'unspecified');
+  setSelectValue(document.getElementById('editTxInternational'), tx.is_international || '');
+  document.getElementById('editTxStay').value = tx.stay_duration || '';
+  document.getElementById('editTxAccom').value = tx.accommodation || '';
+  setSelectValue(document.getElementById('editTxAction'), tx.action_type || 'drop-off');
+  renderEditTxItems(tx.items || []);
+  document.getElementById('editTxModal').style.display = 'flex';
+};
+
+document.getElementById('btnCloseEditTxModal').addEventListener('click', () => {
+  document.getElementById('editTxModal').style.display = 'none';
+});
+document.getElementById('btnCancelEditTx').addEventListener('click', () => {
+  document.getElementById('editTxModal').style.display = 'none';
+});
+document.getElementById('btnAddEditTxItem').addEventListener('click', () => {
+  const listEl = document.getElementById('editTxItemsList');
+  const hint = listEl.querySelector('.form-hint');
+  if (hint) hint.remove();
+  const row = document.createElement('div');
+  row.className = 'edit-tx-item-row';
+  row.innerHTML = `
+    <input type="text" class="edit-tx-item-title" value="" placeholder="Item name" />
+    <input type="number" class="edit-tx-item-amount" value="1" min="1" style="width: 70px;" />
+    <button type="button" class="btn-secondary-sm edit-tx-item-del" title="Remove item"><i class="ph ph-trash"></i></button>
+  `;
+  row.querySelector('.edit-tx-item-del').onclick = () => row.remove();
+  listEl.appendChild(row);
+});
+
+document.getElementById('formEditTx').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('editTxId').value;
+  const items = [...document.querySelectorAll('#editTxItemsList .edit-tx-item-row')].map(r => ({
+    title: r.querySelector('.edit-tx-item-title').value.trim(),
+    amount: parseInt(r.querySelector('.edit-tx-item-amount').value, 10) || 1
+  })).filter(it => it.title);
+  const payload = {
+    user_type: document.getElementById('editTxUserType').value,
+    is_international: document.getElementById('editTxInternational').value,
+    stay_duration: document.getElementById('editTxStay').value.trim(),
+    accommodation: document.getElementById('editTxAccom').value.trim(),
+    action_type: document.getElementById('editTxAction').value,
+    items
+  };
+  try {
+    const res = await fetch(`/api/transactions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('editTxModal').style.display = 'none';
+      loadActivity();
+      loadAnalytics();
+    } else {
+      alert(data.error || 'Failed to save entry.');
+    }
+  } catch (e) {}
+});
 
 function computeUnlinkedItems() {
   const inv = AdminState.inventory;
@@ -683,30 +751,77 @@ function renderUnlinkedItems() {
     box.innerHTML = '<div class="unlinked-empty"><i class="ph ph-check-circle"></i> All kiosk entries match the stock pool. Nothing to link.</div>';
     return;
   }
+
+  const optionHtml = AdminState.inventory.map(it =>
+    `<option value="${it.id}">${escapeHtml(it.title)}${(it.synonyms || []).length ? ' — ' + escapeHtml(it.synonyms.join(', ')) : ''}</option>`
+  ).join('');
+
   box.innerHTML = list.map(u => `
-    <div class="unlinked-row">
+    <div class="unlinked-row" id="linkrow-${encodeURIComponent(u.word)}">
       <div class="unlinked-word">
         <i class="ph ph-package"></i>
         <strong>${escapeHtml(u.word)}</strong>
         <span class="unlinked-count">\u00d7 ${u.count}</span>
       </div>
       <div class="unlinked-actions">
-        <button class="btn-secondary-sm" onclick="linkUnlinked('${escapeHtml(u.word)}')"><i class="ph ph-link"></i> Link to existing</button>
-        <button class="btn-primary-sm" onclick="createItemFromWord('${escapeHtml(u.word)}')"><i class="ph ph-plus"></i> New pool item</button>
+        <button class="btn-secondary-sm" data-toggle><i class="ph ph-link"></i> Link to existing</button>
+        <button class="btn-primary-sm" data-create="${escapeHtml(u.word)}"><i class="ph ph-plus"></i> New pool item</button>
+      </div>
+      <div class="link-picker" style="display: none;">
+        <select class="link-picker-select">${optionHtml || '<option value="">(no pool items yet)</option>'}</select>
+        <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link</button>
+        <button class="btn-secondary-sm" data-cancel><i class="ph ph-x"></i></button>
       </div>
     </div>
   `).join('');
+
+  box.querySelectorAll('.unlinked-row').forEach(row => {
+    const word = row.querySelector('[data-create]').getAttribute('data-create');
+    row.querySelector('[data-toggle]').onclick = () => {
+      row.querySelector('.unlinked-actions').style.display = 'none';
+      row.querySelector('.link-picker').style.display = 'flex';
+    };
+    row.querySelector('[data-cancel]').onclick = () => {
+      row.querySelector('.unlinked-actions').style.display = 'flex';
+      row.querySelector('.link-picker').style.display = 'none';
+    };
+    row.querySelector('[data-create]').onclick = () => createItemFromWord(word);
+    row.querySelector('[data-link]').onclick = () => linkUnlinkedTo(word);
+  });
 }
 
-window.linkUnlinked = (word) => {
-  const w = document.getElementById('mapWord');
-  if (w) {
-    w.value = word;
-    const form = document.getElementById('formMapSynonymPool');
-    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    w.focus();
+function setUnlinkedFeedback(msg, ok = true) {
+  const fb = document.getElementById('unlinkedFeedback');
+  if (!fb) return;
+  fb.style.display = 'block';
+  fb.className = 'feedback-badge ' + (ok ? 'success' : 'error');
+  fb.innerHTML = '<i class="ph ' + (ok ? 'ph-check-circle' : 'ph-x-circle') + '"></i> ' + escapeHtml(msg);
+  setTimeout(() => { fb.style.display = 'none'; }, 4000);
+}
+
+async function linkUnlinkedTo(word) {
+  const rowEl = document.getElementById('linkrow-' + encodeURIComponent(word));
+  const sel = rowEl && rowEl.querySelector('.link-picker-select');
+  const targetId = sel ? sel.value : null;
+  if (!targetId) { setUnlinkedFeedback('Select an item to link to first.', false); return; }
+  try {
+    const res = await fetch('/api/admin/map-synonym', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ synonym: word, targetItemId: targetId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      await loadInventory();
+      loadActivity();
+      setUnlinkedFeedback('"' + word + '" now maps to "' + ((data.item && data.item.title) || 'existing pool') + '".');
+    } else {
+      setUnlinkedFeedback(data.error || 'Failed to link word.', false);
+    }
+  } catch (e) {
+    setUnlinkedFeedback('Error linking word.', false);
   }
-};
+}
 
 window.createItemFromWord = (word) => {
   const form = document.getElementById('formAddNewItem');
@@ -729,3 +844,101 @@ function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+
+// ==========================================================================
+// SETTINGS & CONTENT TAB
+// ==========================================================================
+const DEFAULT_ACCOMMODATIONS = [
+  { name: 'Parkside Student Residence', desc: 'North Campus Hall', icon: 'ph-buildings' },
+  { name: 'Oakwood Student Village', desc: 'East Quad Residence', icon: 'ph-buildings' },
+  { name: 'Riverfront Campus Towers', desc: 'South Bank High-Rise', icon: 'ph-buildings' },
+  { name: 'Meadow Court Flats', desc: 'West Campus Lodges', icon: 'ph-buildings' },
+  { name: 'West End College Lodge', desc: 'Central University Hall', icon: 'ph-buildings' }
+];
+
+let settingsLoaded = false;
+
+async function initSettingsTab() {
+  if (settingsLoaded) return;
+  settingsLoaded = true;
+  let list = DEFAULT_ACCOMMODATIONS;
+  try {
+    const res = await fetch('/api/settings');
+    const data = await res.json();
+    if (data.success && data.settings) {
+      document.getElementById('settingShopName').value = data.settings.shopName || '';
+      document.getElementById('settingCo2').value = data.settings.co2KgPerKgGoods != null ? data.settings.co2KgPerKgGoods : 2.8;
+      if (Array.isArray(data.settings.accommodations) && data.settings.accommodations.length) {
+        list = data.settings.accommodations;
+      }
+    }
+  } catch (e) {}
+  renderAccomEditor(list);
+}
+
+function renderAccomEditor(list) {
+  const box = document.getElementById('accomEditorList');
+  box.innerHTML = list.map(a => `
+    <div class="accom-row">
+      <input type="text" class="accom-name" value="${escapeHtml(a.name || '')}" placeholder="Residence name" />
+      <input type="text" class="accom-desc" value="${escapeHtml(a.desc || '')}" placeholder="Short description" />
+      <input type="text" class="accom-icon" list="phIconOptions" value="${escapeHtml(a.icon || 'ph-buildings')}" placeholder="icon" />
+      <button type="button" class="btn-secondary-sm accom-del" title="Remove"><i class="ph ph-trash"></i></button>
+    </div>
+  `).join('') || '<div class="form-hint">No accommodations yet — add one below.</div>';
+  box.querySelectorAll('.accom-del').forEach(btn => {
+    btn.onclick = () => btn.closest('.accom-row').remove();
+  });
+}
+
+document.getElementById('btnAddAccomRow').addEventListener('click', () => {
+  const box = document.getElementById('accomEditorList');
+  const hint = box.querySelector('.form-hint');
+  if (hint) hint.remove();
+  const row = document.createElement('div');
+  row.className = 'accom-row';
+  row.innerHTML = `
+    <input type="text" class="accom-name" value="" placeholder="Residence name" />
+    <input type="text" class="accom-desc" value="" placeholder="Short description" />
+    <input type="text" class="accom-icon" list="phIconOptions" value="ph-buildings" placeholder="icon" />
+    <button type="button" class="btn-secondary-sm accom-del" title="Remove"><i class="ph ph-trash"></i></button>
+  `;
+  row.querySelector('.accom-del').onclick = () => row.remove();
+  box.appendChild(row);
+});
+
+document.getElementById('formShopSettings').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const accommodations = [...document.querySelectorAll('#accomEditorList .accom-row')].map(r => ({
+    name: r.querySelector('.accom-name').value.trim(),
+    desc: r.querySelector('.accom-desc').value.trim(),
+    icon: r.querySelector('.accom-icon').value.trim() || 'ph-buildings'
+  })).filter(a => a.name);
+  const fb = document.getElementById('settingsFeedback');
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopName: document.getElementById('settingShopName').value.trim(),
+        co2KgPerKgGoods: parseFloat(document.getElementById('settingCo2').value),
+        accommodations
+      })
+    });
+    const data = await res.json();
+    fb.style.display = 'block';
+    if (data.success) {
+      fb.className = 'feedback-badge success';
+      fb.innerHTML = '<i class="ph ph-check-circle"></i> Settings saved — the kiosk picks them up on next load.';
+    } else {
+      fb.className = 'feedback-badge error';
+      fb.innerHTML = '<i class="ph ph-x-circle"></i> ' + (data.error || 'Failed to save');
+    }
+  } catch (e) {
+    fb.style.display = 'block';
+    fb.className = 'feedback-badge error';
+    fb.innerHTML = '<i class="ph ph-x-circle"></i> Error saving settings';
+  }
+  setTimeout(() => { fb.style.display = 'none'; }, 4000);
+});
