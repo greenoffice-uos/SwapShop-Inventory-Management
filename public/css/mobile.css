@@ -365,6 +365,10 @@ body.mobile-kiosk-body {
   background-color: var(--primary-light);
 }
 
+.option-card-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.option-card-btn.option-past { opacity: 0.75; cursor: pointer; border-style: dashed; }
+.option-card-btn.option-past:hover { opacity: 1; border-color: var(--primary); background-color: var(--primary-light); }
+
 .option-icon {
   width: 36px;
   height: 36px;

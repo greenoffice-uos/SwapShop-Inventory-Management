@@ -63,14 +63,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initKioskSession();
   loadInventory();
 
-  const btnRestart = document.getElementById('btnRestartKiosk');
-  if (btnRestart) {
-    btnRestart.onclick = () => {
-      if (confirm('Start a fresh swap session?')) {
-        startFreshSession();
-      }
-    };
-  }
 });
 
 // ==========================================================================
@@ -1133,13 +1125,42 @@ function addUserMessage(text, stepNumber = null) {
   }
 
   thread.appendChild(row);
+  rearmPastOptionCards();
   scrollChatBottom();
 }
 
 function disableCurrentOptions() {
   document.querySelectorAll('.option-card-btn').forEach(b => {
     b.disabled = true;
-    b.style.opacity = '0.6';
+  });
+}
+
+/**
+ * Re-arm the option cards of questions that already have a saved answer, so
+ * tapping a previous response anywhere in the (scrolled) history opens the
+ * same change flow as the "Change" chip on the message.
+ */
+function rearmPastOptionCards() {
+  const thread = document.getElementById('chatThread');
+  if (!thread) return;
+  thread.querySelectorAll('.chat-row.user').forEach(userRow => {
+    const stepBtn = userRow.querySelector('[data-change-step]');
+    if (!stepBtn) return;
+    let el = userRow.previousElementSibling;
+    while (el) {
+      const btns = el.querySelectorAll ? el.querySelectorAll('.option-card-btn') : [];
+      if (btns.length) {
+        const step = stepBtn.getAttribute('data-change-step');
+        btns.forEach(b => {
+          b.disabled = false;
+          b.classList.add('option-past');
+          b.title = 'Change this answer';
+          b.onclick = () => changeStepAnswer(step);
+        });
+        return;
+      }
+      el = el.previousElementSibling;
+    }
   });
 }
 

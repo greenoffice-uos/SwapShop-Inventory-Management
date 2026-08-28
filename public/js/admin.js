@@ -107,7 +107,6 @@ function initNavTabs() {
       });
 
       if (target === 'inventory') renderInventoryTable();
-      if (target === 'categories') renderCategoriesTable();
       if (target === 'analytics') loadAnalytics();
       if (target === 'activity') loadActivity();
       if (target === 'settings') initSettingsTab();
@@ -413,6 +412,14 @@ function initModals() {
 
   document.getElementById('btnCloseNewItemModal').onclick = () => { addModal.style.display = 'none'; };
   document.getElementById('btnCancelNewItem').onclick = () => { addModal.style.display = 'none'; };
+  const newIconEl = document.getElementById('newIcon');
+  const newIconPrev = document.getElementById('newIconPreview');
+  if (newIconEl && newIconPrev) {
+    newIconEl.oninput = () => {
+      const v = (newIconEl.value || '').trim().toLowerCase().replace(/\s+/g, '-');
+      newIconPrev.className = 'ph cat-icon-preview ' + (v ? (v.startsWith('ph-') ? v : 'ph-' + v) : 'ph-package');
+    };
+  }
   document.getElementById('btnCloseEditModal').onclick = () => { editModal.style.display = 'none'; };
   document.getElementById('btnCancelEdit').onclick = () => { editModal.style.display = 'none'; };
 
@@ -427,13 +434,14 @@ function initModals() {
     const est_value_eur = parseFloat(document.getElementById('newValue').value) || 10.0;
     const co2_factor = parseFloat(document.getElementById('newCo2').value) || ((weight_kg) * 2.8).toFixed(1);
     const synRaw = document.getElementById('newSynonyms').value.trim();
+    const newIconRaw = (document.getElementById('newIcon') ? document.getElementById('newIcon').value : '').trim().toLowerCase().replace(/\s+/g, '-');
     const synonyms = synRaw ? synRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [title.toLowerCase()];
 
     try {
       const res = await fetch('/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, quantity, unit, weight_kg, est_value_eur, co2_factor, synonyms, icon: 'ph-package' })
+        body: JSON.stringify({ title, category, quantity, unit, weight_kg, est_value_eur, co2_factor, synonyms, icon: newIconRaw ? (newIconRaw.startsWith('ph-') ? newIconRaw : 'ph-' + newIconRaw) : 'ph-package' })
       });
       if (res.ok) {
         addModal.style.display = 'none';
@@ -455,12 +463,13 @@ function initModals() {
     const co2_factor = parseFloat(document.getElementById('editCo2').value);
     const synRaw = document.getElementById('editSynonyms').value.trim();
     const synonyms = synRaw ? synRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+    const iconRaw = (document.getElementById('editIcon') ? document.getElementById('editIcon').value : '').trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
       const res = await fetch(`/api/inventory/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, quantity, unit, weight_kg, est_value_eur, co2_factor, synonyms })
+        body: JSON.stringify({ title, category, quantity, unit, weight_kg, est_value_eur, co2_factor, synonyms, ...(iconRaw ? { icon: iconRaw.startsWith('ph-') ? iconRaw : 'ph-' + iconRaw } : {}) })
       });
       if (res.ok) {
         editModal.style.display = 'none';
@@ -491,6 +500,19 @@ window.openEditModal = (id) => {
   document.getElementById('editValue').value = item.est_value_eur || 10.0;
   document.getElementById('editCo2').value = item.co2_factor || ((item.weight_kg || 0.5) * 2.8).toFixed(1);
   document.getElementById('editSynonyms').value = (item.synonyms || []).join(', ');
+
+  const editIconEl = document.getElementById('editIcon');
+  const editIconPrev = document.getElementById('editIconPreview');
+  if (editIconEl && editIconPrev) {
+    const rawIcon = (item.icon || '').replace(/^ph-/, '');
+    editIconEl.value = rawIcon;
+    const paintEditIcon = () => {
+      const v = (editIconEl.value || '').trim().toLowerCase().replace(/\s+/g, '-');
+      editIconPrev.className = 'ph cat-icon-preview ' + (v ? (v.startsWith('ph-') ? v : 'ph-' + v) : 'ph-package');
+    };
+    paintEditIcon();
+    editIconEl.oninput = paintEditIcon;
+  }
 
   document.getElementById('editItemModal').style.display = 'flex';
 };
@@ -752,9 +774,12 @@ function renderUnlinkedItems() {
         <span class="unlinked-count">\u00d7 ${u.count}</span>
       </div>
       <div class="unlinked-controls">
-        <div class="link-group">
-          <select class="link-picker-select">${optionHtml || '<option value="">(no pool items yet)</option>'}</select>
-          <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link to existing</button>
+        <div class="link-col">
+          <input type="text" class="link-filter-input" placeholder="Filter pool items\u2026" autocomplete="off" />
+          <div class="link-group">
+            <select class="link-picker-select">${optionHtml || '<option value="">(no pool items yet)</option>'}</select>
+            <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link to existing</button>
+          </div>
         </div>
         <button class="btn-secondary-sm" data-create="${escapeHtml(u.word)}"><i class="ph ph-plus"></i> New pool item</button>
       </div>
@@ -765,6 +790,26 @@ function renderUnlinkedItems() {
     const word = row.querySelector('[data-create]').getAttribute('data-create');
     row.querySelector('[data-create]').onclick = () => createItemFromWord(word);
     row.querySelector('[data-link]').onclick = () => linkUnlinkedTo(word);
+    const filter = row.querySelector('.link-filter-input');
+    const select = row.querySelector('.link-picker-select');
+    if (filter && select) {
+      filter.addEventListener('input', () => {
+        const q = filter.value.trim().toLowerCase();
+        const opts = [...select.options].filter(o => o.value);
+        let visible = 0;
+        opts.forEach(o => {
+          const show = !q || o.textContent.toLowerCase().includes(q);
+          o.hidden = !show;
+          if (show) visible++;
+        });
+        if (q && visible === 0) opts.forEach(o => { o.hidden = false; });
+        const sel = select.selectedOptions && select.selectedOptions[0];
+        if (sel && sel.hidden) {
+          const fv = opts.find(o => !o.hidden);
+          if (fv) select.value = fv.value;
+        }
+      });
+    }
   });
 }
 
