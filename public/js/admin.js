@@ -107,7 +107,6 @@ function initNavTabs() {
       });
 
       if (target === 'inventory') renderInventoryTable();
-      if (target === 'synonyms') renderSynonymDirectory();
       if (target === 'categories') renderCategoriesTable();
       if (target === 'analytics') loadAnalytics();
       if (target === 'activity') loadActivity();
@@ -141,8 +140,6 @@ async function loadInventory() {
     if (data.success && data.items) {
       AdminState.inventory = data.items;
       renderInventoryTable();
-      renderSynonymDirectory();
-      populateTargetItemSelect();
       renderUnlinkedItems();
     }
   } catch (e) {}
@@ -169,12 +166,12 @@ function renderInventoryTable() {
   }
 
   tbody.innerHTML = filtered.map(item => {
-    const synChips = (item.synonyms && item.synonyms.length > 0)
-      ? item.synonyms.map(s => `<span class="syn-micro-pill">${escapeHtml(s)}</span>`).join('')
-      : '<span style="color: var(--text-muted); font-size: 0.75rem;">None</span>';
+    const tagPills = (item.synonyms && item.synonyms.length > 0)
+      ? item.synonyms.map(s => `<span class="tag-pill">${escapeHtml(s)}<button type="button" class="tag-pill-x" data-rmtag="${escapeHtml(s)}" title="Remove tag">&#215;</button></span>`).join('')
+      : '<span class="tag-none">No tags</span>';
 
     return `
-      <tr>
+      <tr data-item-id="${item.id}">
         <td>
           <div style="display: flex; align-items: center; gap: 0.65rem;">
             <i class="ph ${item.icon || 'ph-package'}" style="font-size: 1.3rem; color: var(--primary);"></i>
@@ -195,7 +192,15 @@ function renderInventoryTable() {
         <td>${item.weight_kg || 0.5} kg</td>
         <td>€${item.est_value_eur || 10.0}</td>
         <td>${item.co2_factor || ((item.weight_kg || 0.5) * 2.8).toFixed(1)} kg</td>
-        <td><div class="syn-chips-wrap">${synChips}</div></td>
+        <td>
+          <div class="tag-editor">
+            <div class="tag-chips">${tagPills}</div>
+            <form class="tag-add-form" data-tagitem="${item.id}">
+              <input type="text" class="tag-add-input" placeholder="+ tag" autocomplete="off">
+              <button type="submit" class="tag-add-btn" title="Add tag"><i class="ph ph-plus"></i></button>
+            </form>
+          </div>
+        </td>
         <td>
           <div style="display: flex; gap: 0.35rem;">
             <button class="btn-secondary-sm" onclick="openEditModal('${item.id}')" title="Edit Item"><i class="ph ph-pencil-simple"></i></button>
@@ -205,6 +210,20 @@ function renderInventoryTable() {
       </tr>
     `;
   }).join('');
+
+  // Wire inline tag editing on the freshly rendered rows
+  tbody.querySelectorAll('form.tag-add-form').forEach(form => {
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      addTagToItem(form.dataset.tagitem, form.querySelector('input'));
+    };
+  });
+  tbody.querySelectorAll('button.tag-pill-x').forEach(btn => {
+    btn.onclick = () => {
+      const tr = btn.closest('tr');
+      if (tr && tr.dataset.itemId) removeTagFromItem(tr.dataset.itemId, btn.dataset.rmtag);
+    };
+  });
 }
 
 async function updateStock(id, newQty) {
@@ -228,80 +247,43 @@ async function deleteItem(id) {
 }
 
 // ==========================================================================
-// SYNONYM & POOL MAPPING ASSISTANT
+// TAG EDITING (inline in the inventory table)
 // ==========================================================================
-function renderSynonymDirectory() {
-  const grid = document.getElementById('synonymDirectoryGrid');
-  if (!grid) return;
 
-  const sorted = [...AdminState.inventory].sort((a, b) => a.title.localeCompare(b.title));
-
-  grid.innerHTML = sorted.map(item => {
-    const pills = (item.synonyms || []).map(s => `
-      <span class="dir-syn-pill">
-        ${escapeHtml(s)}
-        <button class="btn-del-syn" onclick="removeSynonym('${item.id}', '${escapeHtml(s)}')">×</button>
-      </span>
-    `).join('');
-
-    return `
-      <div class="dir-card">
-        <div class="dir-header">
-          <span class="dir-title"><i class="ph ${item.icon || 'ph-package'}"></i> ${escapeHtml(item.title)}</span>
-          <span class="dir-stock">${item.quantity || 0} in pool</span>
-        </div>
-        <div class="dir-pills">${pills || '<span style="font-size:0.75rem; color:var(--text-muted);">No synonyms</span>'}</div>
-        <form class="quick-add-syn" onsubmit="event.preventDefault(); addSynonym(this, '${item.id}');">
-          <input type="text" placeholder="+ add synonym..." required />
-          <button type="submit" class="btn-secondary-sm" style="padding: 0.2rem 0.5rem;"><i class="ph ph-plus"></i></button>
-        </form>
-      </div>
-    `;
-  }).join('');
-}
-
-async function addSynonym(formEl, itemId) {
-  const input = formEl.querySelector('input');
-  const val = input.value.trim().toLowerCase();
-  if (!val) return;
-
-  const item = AdminState.inventory.find(i => i.id === itemId);
-  if (!item) return;
-
-  if (!item.synonyms) item.synonyms = [];
-  if (!item.synonyms.includes(val)) {
-    item.synonyms.push(val);
-    await fetch(`/api/inventory/${itemId}`, {
+async function persistSynonyms(item, synonyms) {
+  try {
+    const res = await fetch(`/api/inventory/${item.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ synonyms: item.synonyms })
+      body: JSON.stringify({ synonyms })
     });
-    input.value = '';
-    loadInventory();
-  }
+    if (res.ok) {
+      loadInventory();   // re-render table + unlinked flag
+      loadActivity();    // refresh activity trail
+    }
+  } catch (e) {}
 }
 
-async function removeSynonym(itemId, syn) {
+async function addTagToItem(itemId, inputEl) {
+  const val = (inputEl.value || '').trim().toLowerCase();
+  if (!val) return;
+  const item = AdminState.inventory.find(i => i.id === itemId);
+  if (!item) return;
+  if (!item.synonyms) item.synonyms = [];
+  if (item.synonyms.some(s => s.toLowerCase() === val)) {
+    inputEl.value = '';
+    return;
+  }
+  item.synonyms.push(val);
+  await persistSynonyms(item, item.synonyms);
+}
+
+async function removeTagFromItem(itemId, syn) {
   const item = AdminState.inventory.find(i => i.id === itemId);
   if (!item || !item.synonyms) return;
-
-  item.synonyms = item.synonyms.filter(s => s.toLowerCase() !== syn.toLowerCase());
-  await fetch(`/api/inventory/${itemId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ synonyms: item.synonyms })
-  });
-  loadInventory();
-}
-
-function populateTargetItemSelect() {
-  const select = document.getElementById('mapTargetItem');
-  if (!select) return;
-
-  const sorted = [...AdminState.inventory].sort((a, b) => a.title.localeCompare(b.title));
-  select.innerHTML = sorted.map(i => `
-    <option value="${i.id}">${escapeHtml(i.title)} (${escapeHtml(i.category)} • Stock: ${i.quantity})</option>
-  `).join('');
+  const next = item.synonyms.filter(s => s.toLowerCase() !== String(syn).toLowerCase());
+  if (next.length === item.synonyms.length) return;
+  await persistSynonyms(item, next);
 }
 
 // ==========================================================================
@@ -747,6 +729,12 @@ function renderUnlinkedItems() {
   const box = document.getElementById('unlinkedItemsList');
   if (!box) return;
   const list = computeUnlinkedItems();
+  const panel = document.getElementById('unlinkedPanel');
+  if (panel) panel.className = 'unlinked-panel ' + (list.length ? 'flagged' : 'clear');
+  const title = document.getElementById('unlinkedTitle');
+  if (title) title.innerHTML = list.length
+    ? '<i class="ph ph-link"></i> Unlinked kiosk entries'
+    : '<i class="ph ph-check-circle"></i> All kiosk entries linked';
   if (!list.length) {
     box.innerHTML = '<div class="unlinked-empty"><i class="ph ph-check-circle"></i> All kiosk entries match the stock pool. Nothing to link.</div>';
     return;
@@ -763,28 +751,18 @@ function renderUnlinkedItems() {
         <strong>${escapeHtml(u.word)}</strong>
         <span class="unlinked-count">\u00d7 ${u.count}</span>
       </div>
-      <div class="unlinked-actions">
-        <button class="btn-secondary-sm" data-toggle><i class="ph ph-link"></i> Link to existing</button>
-        <button class="btn-primary-sm" data-create="${escapeHtml(u.word)}"><i class="ph ph-plus"></i> New pool item</button>
-      </div>
-      <div class="link-picker" style="display: none;">
-        <select class="link-picker-select">${optionHtml || '<option value="">(no pool items yet)</option>'}</select>
-        <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link</button>
-        <button class="btn-secondary-sm" data-cancel><i class="ph ph-x"></i></button>
+      <div class="unlinked-controls">
+        <div class="link-group">
+          <select class="link-picker-select">${optionHtml || '<option value="">(no pool items yet)</option>'}</select>
+          <button class="btn-primary-sm" data-link="${escapeHtml(u.word)}"><i class="ph ph-check"></i> Link to existing</button>
+        </div>
+        <button class="btn-secondary-sm" data-create="${escapeHtml(u.word)}"><i class="ph ph-plus"></i> New pool item</button>
       </div>
     </div>
   `).join('');
 
   box.querySelectorAll('.unlinked-row').forEach(row => {
     const word = row.querySelector('[data-create]').getAttribute('data-create');
-    row.querySelector('[data-toggle]').onclick = () => {
-      row.querySelector('.unlinked-actions').style.display = 'none';
-      row.querySelector('.link-picker').style.display = 'flex';
-    };
-    row.querySelector('[data-cancel]').onclick = () => {
-      row.querySelector('.unlinked-actions').style.display = 'flex';
-      row.querySelector('.link-picker').style.display = 'none';
-    };
     row.querySelector('[data-create]').onclick = () => createItemFromWord(word);
     row.querySelector('[data-link]').onclick = () => linkUnlinkedTo(word);
   });

@@ -1003,6 +1003,25 @@ input:focus, select:focus {
 .unlinked-word i { color: #d97706; font-size: 1.15rem; }
 .unlinked-count { font-size: 0.72rem; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: var(--radius-full, 999px); padding: 0.1rem 0.5rem; }
 .unlinked-actions { display: flex; gap: 0.4rem; }
+.unlinked-panel.flagged { background: #fffbeb; border-color: #fcd34d; }
+.unlinked-panel.flagged h4 { color: #b45309; }
+.unlinked-panel.clear { background: #f0fdf4; border-color: #86efac; }
+.unlinked-panel.clear h4 { color: #15803d; }
+.unlinked-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.link-group { display: inline-flex; align-items: stretch; }
+.link-group .link-picker-select { border-radius: 8px 0 0 8px; border-right: none; max-width: 220px; background: #fff; }
+.link-group .btn-primary-sm { border-radius: 0 8px 8px 0; white-space: nowrap; }
+.tag-editor { display: flex; flex-direction: column; gap: 0.3rem; max-width: 300px; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.tag-pill { display: inline-flex; align-items: center; gap: 0.2rem; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 0.08rem 0.45rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.tag-pill-x { border: none; background: none; cursor: pointer; color: #059669; font-size: 0.9rem; line-height: 1; padding: 0 0.05rem; }
+.tag-pill-x:hover { color: #dc2626; }
+.tag-none { color: var(--text-muted, #6b7280); font-size: 0.75rem; }
+.tag-add-form { display: flex; align-items: center; gap: 0.25rem; }
+.tag-add-input { width: 92px; padding: 0.18rem 0.5rem; border: 1px dashed #cbd5e1; border-radius: 999px; font-size: 0.72rem; background: #fff; }
+.tag-add-input:focus { outline: none; border-color: var(--primary, #16a34a); border-style: solid; }
+.tag-add-btn { border: none; background: #ecfdf5; color: #065f46; width: 22px; height: 22px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex: none; }
+.tag-add-btn:hover { background: #d1fae5; }
 .unlinked-empty { font-size: 0.82rem; color: var(--text-muted, #6b7280); display: flex; align-items: center; gap: 0.4rem; }
 
 /* Activity timeline entry delete */

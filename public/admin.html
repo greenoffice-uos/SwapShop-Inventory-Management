@@ -71,9 +71,6 @@
       <button class="nav-btn active" data-tab="inventory">
         <i class="ph ph-package"></i> Stock Inventory
       </button>
-      <button class="nav-btn" data-tab="synonyms">
-        <i class="ph ph-tree-structure"></i> Synonyms & Pool Mapping
-      </button>
       <button class="nav-btn" data-tab="categories">
         <i class="ph ph-folder-simple"></i> Categories Setup
       </button>
@@ -93,10 +90,17 @@
 
       <!-- TAB 1: STOCK INVENTORY -->
       <section class="tab-section active" id="sec-inventory">
+        <div class="unlinked-panel" id="unlinkedPanel">
+          <h4 id="unlinkedTitle"><i class="ph ph-link"></i> Unlinked kiosk entries</h4>
+          <p>Words entered at the kiosk that don't match any stock pool item yet. Pick a pool item and link it, or turn the word into a new pool item (it becomes the name and a synonym).</p>
+          <div id="unlinkedFeedback" class="feedback-badge" style="display: none;"></div>
+          <div id="unlinkedItemsList" class="unlinked-list"></div>
+        </div>
+
         <div class="section-toolbar">
           <div class="search-box">
             <i class="ph ph-magnifying-glass"></i>
-            <input type="text" id="invSearchInput" placeholder="Search generic items or synonyms..." />
+            <input type="text" id="invSearchInput" placeholder="Search items or tags..." />
           </div>
           <div class="toolbar-btns">
             <button class="btn-primary-sm" id="btnOpenNewItemModal">
@@ -120,35 +124,12 @@
                 <th>Weight</th>
                 <th>Est. Value</th>
                 <th>CO₂ Factor</th>
-                <th>Synonyms Registered</th>
+                <th>Tags</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="invTableBody"></tbody>
           </table>
-        </div>
-      </section>
-
-      <!-- TAB 2: SYNONYM & POOL MAPPING ASSISTANT -->
-      <section class="tab-section" id="sec-synonyms" style="display: none;">
-        <div class="synonym-banner">
-          <div class="banner-icon"><i class="ph ph-arrows-split"></i></div>
-          <div>
-            <h3>Synonym & Stock Pool Linker</h3>
-            <p>Visitors frequently describe items using diverse words (e.g. <em>"skillet"</em> for Pan, <em>"beaker"</em> for Mug, <em>"comforter"</em> for Duvet). Map new words directly to an existing item's pool and adjust the stock quantity.</p>
-          </div>
-        </div>
-
-        <div class="unlinked-panel">
-          <h4><i class="ph ph-link"></i> Unlinked kiosk entries</h4>
-          <p>Words entered at the kiosk that don't match any stock pool item yet. Link a word to an existing item, or turn it into a new one (the word becomes its name and a synonym).</p>
-          <div id="unlinkedFeedback" class="feedback-badge" style="display: none;"></div>
-          <div id="unlinkedItemsList" class="unlinked-list"></div>
-        </div>
-
-        <div class="directory-container">
-          <h4><i class="ph ph-books"></i> Current Item Synonym Directory</h4>
-          <div class="directory-grid" id="synonymDirectoryGrid"></div>
         </div>
       </section>
 
